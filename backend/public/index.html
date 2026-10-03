@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LuMi — Tu música</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231db954'/%3E%3Ctext x='50' y='72' font-size='58' text-anchor='middle' fill='%23000' font-weight='900' font-family='system-ui'%3ELM%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <i class="fa-solid fa-headphones-simple"></i>
+      </div>
+      <div class="brand-text">
+        <h1>LuMi</h1>
+        <span>Tu música, tus reglas</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs-bar">
+    <div class="tabs">
+      <button class="tab active" data-tab="library">
+        <i class="fa-solid fa-compact-disc"></i>
+        <span>Biblioteca</span>
+      </button>
+      <button class="tab" data-tab="charts">
+        <i class="fa-solid fa-chart-simple"></i>
+        <span>Charts</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Vista: Biblioteca -->
+  <main id="view-library" class="view active">
+    <div class="toolbar">
+      <div class="input-with-icon">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="search" type="text" placeholder="Buscar en tu biblioteca...">
+      </div>
+
+      <select id="sourceFilter" title="Filtrar por fuente">
+        <option value="all">Todas las fuentes</option>
+        <option value="manual">Suelta</option>
+        <option value="billboard-hot-100">Billboard</option>
+        <option value="itunes-us">iTunes USA</option>
+        <option value="itunes-mx">iTunes México</option>
+        <option value="itunes-es">iTunes España</option>
+        <option value="itunes-ar">iTunes Argentina</option>
+        <option value="itunes-co">iTunes Colombia</option>
+        <option value="spotify-global">Spotify</option>
+      </select>
+
+      <select id="playlistFilter" title="Filtrar por lista">
+        <option value="all">Todas las listas</option>
+      </select>
+
+      <div class="input-with-icon grow">
+        <i class="fa-solid fa-cloud-arrow-down"></i>
+        <input id="newTrack" type="text" placeholder="Descargar 1 canción (ej: Bad Bunny Monaco)">
+      </div>
+
+      <button id="downloadBtn">
+        <i class="fa-solid fa-download"></i>
+        <span>Descargar</span>
+      </button>
+    </div>
+    <div id="status"></div>
+    <div id="playlist" class="grid"></div>
+  </main>
+
+  <!-- Vista: Charts -->
+  <main id="view-charts" class="view">
+    <div class="toolbar">
+      <select id="chartSource" title="Fuente del chart"></select>
+      <select id="chartLimit">
+        <option value="5">Top 5</option>
+        <option value="10" selected>Top 10</option>
+        <option value="25">Top 25</option>
+        <option value="50">Top 50</option>
+        <option value="100">Top 100</option>
+      </select>
+      <button id="loadChartBtn" class="btn-secondary">
+        <i class="fa-solid fa-eye"></i>
+        <span>Ver chart</span>
+      </button>
+      <button id="downloadChartBtn">
+        <i class="fa-solid fa-download"></i>
+        <span>Descargar chart</span>
+      </button>
+    </div>
+    <div id="chartStatus"></div>
+    <div id="chartList" class="chart-list"></div>
+  </main>
+
+  <!-- Modal: Añadir a lista -->
+  <div id="playlistModal" class="modal hidden">
+    <div class="modal-content">
+      <h3><i class="fa-solid fa-list-check"></i> Añadir a lista</h3>
+      <div id="modalTrackName" class="modal-track-name"></div>
+      <div id="playlistModalList" class="modal-list"></div>
+      <div class="modal-new">
+        <input id="newPlaylistInput" placeholder="Crear lista nueva...">
+        <button id="createPlaylistBtn">
+          <i class="fa-solid fa-plus"></i>
+          <span>Crear</span>
+        </button>
+      </div>
+      <div class="modal-actions">
+        <button id="closeModalBtn" class="btn-secondary">
+          <i class="fa-solid fa-xmark"></i>
+          <span>Cerrar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reproductor fijo -->
+  <footer class="player">
+    <div class="player-info">
+      <div id="nowPlaying">
+        <i class="fa-solid fa-circle-pause"></i>
+        <span>Sin reproducción</span>
+      </div>
+      <div id="trackMeta"></div>
+    </div>
+    <audio id="audio" controls></audio>
+    <div class="controls">
+      <button id="prevBtn" title="Anterior"><i class="fa-solid fa-backward-step"></i></button>
+      <button id="nextBtn" title="Siguiente"><i class="fa-solid fa-forward-step"></i></button>
+    </div>
+  </footer>
+
+  <script src="player.js"></script>
+</body>
+</html>
