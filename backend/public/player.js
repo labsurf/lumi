@@ -1,17 +1,27 @@
 // ─── Detección de entorno ─────────────────────────────
 // Local → usa el proxy local (/api)
-// GitHub Pages / producción → usa Render
+// GitHub Pages → usa Render
 const API = (() => {
   const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') {
     return '/api';
   }
-  // ⚠️ CAMBIA ESTA URL POR LA TUYA DE RENDER (la tendrás en el Paso 5)
   return 'https://lumi-backend-5w78.onrender.com/api';
 })();
 
 console.log(`🌐 Frontend: ${window.location.origin}`);
 console.log(`🔗 Backend: ${API}`);
+
+// ─── Resuelve URLs relativas del backend a absolutas ──
+// "/api/cover/XXX" → "https://lumi-backend-.../api/cover/XXX"
+// En local: "/api/cover/XXX" se queda igual (mismo origen)
+function resolveUrl(url) {
+  if (!url) return url;
+  if (!url.startsWith('/api')) return url;
+  const base = API.replace(/\/api$/, '');
+  return base + url;
+}
+
 // ─── DOM ──────────────────────────────────────────────
 const audio = document.getElementById('audio');
 const playlistEl = document.getElementById('playlist');
@@ -112,15 +122,19 @@ async function loadTracks() {
 
 // ─── Cargar playlists ─────────────────────────────────
 async function loadPlaylists() {
-  const res = await fetch(`${API}/playlists`);
-  playlists = await res.json();
+  try {
+    const res = await fetch(`${API}/playlists`);
+    playlists = await res.json();
 
-  const current = playlistFilterSel.value;
-  playlistFilterSel.innerHTML =
-    '<option value="all">Todas las listas</option>' +
-    playlists.map((p) => `<option value="${p.id}">${p.name} (${p.count})</option>`).join('');
-  if ([...playlistFilterSel.options].some((o) => o.value === current)) {
-    playlistFilterSel.value = current;
+    const current = playlistFilterSel.value;
+    playlistFilterSel.innerHTML =
+      '<option value="all">Todas las listas</option>' +
+      playlists.map((p) => `<option value="${p.id}">${p.name} (${p.count})</option>`).join('');
+    if ([...playlistFilterSel.options].some((o) => o.value === current)) {
+      playlistFilterSel.value = current;
+    }
+  } catch (err) {
+    console.error('Error cargando playlists:', err);
   }
 }
 
@@ -144,7 +158,7 @@ function render() {
     card.dataset.id = t.id;
 
     const coverHtml = t.coverUrl
-      ? `<img class="cover" src="${t.coverUrl}" alt="${t.name}" loading="lazy"
+      ? `<img class="cover" src="${resolveUrl(t.coverUrl)}" alt="${t.name}" loading="lazy"
               onerror="this.parentNode.innerHTML='<div class=&quot;cover-placeholder&quot;><i class=&quot;fa-solid fa-music&quot;></i></div>'">`
       : `<div class="cover-placeholder"><i class="fa-solid fa-music"></i></div>`;
 
@@ -211,10 +225,9 @@ function playTrack(index) {
   if (index < 0 || index >= filtered.length) return;
   currentIndex = index;
   const track = filtered[index];
-  audio.src = `${API}/stream/${track.id}`;
-  audio.play();
+  audio.src = resolveUrl(track.streamUrl);
+  audio.play().catch((err) => console.warn('Reproducción:', err.message));
   nowPlaying.innerHTML = `${ICONS.play} <span>${track.name}</span>`;
-  trackMeta.textContent = `${sourceLabel(track.source).replace(/<[^>]+>/g, '')} · ${new Date(track.createdAt).toLocaleDateString()}`;
   trackMeta.innerHTML = `${sourceLabel(track.source)} · ${new Date(track.createdAt).toLocaleDateString()}`;
   render();
 }
@@ -370,11 +383,15 @@ newPlaylistInput.addEventListener('keydown', (e) => {
 
 // ─── CHART: fuentes ──────────────────────────────────
 async function loadSources() {
-  const res = await fetch(`${API}/charts/sources`);
-  const sources = await res.json();
-  chartSourceSel.innerHTML = sources
-    .map((s) => `<option value="${s.id}" title="${s.description}">${s.name}</option>`)
-    .join('');
+  try {
+    const res = await fetch(`${API}/charts/sources`);
+    const sources = await res.json();
+    chartSourceSel.innerHTML = sources
+      .map((s) => `<option value="${s.id}" title="${s.description}">${s.name}</option>`)
+      .join('');
+  } catch (err) {
+    console.error('Error cargando fuentes:', err);
+  }
 }
 
 // ─── CHART: ver lista ────────────────────────────────
