@@ -4,7 +4,7 @@
 const API = (() => {
   const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') {
-    return '/api';
+    return 'https://lumi-backend-5w78.onrender.com/api';
   }
   // ⚠️ CAMBIA ESTA URL POR LA TUYA DE RENDER (la tendrás en el Paso 5)
   return 'https://lumi-backend.onrender.com/api';
