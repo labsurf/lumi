@@ -2,25 +2,29 @@ FROM node:20-bookworm
 
 WORKDIR /app
 
-# Instalar dependencias del sistema (ffmpeg + python para yt-dlp)
+# ── Dependencias del sistema ──────────────────────────
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
     python3-pip \
     curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar yt-dlp (--break-system-packages requerido en Debian 12+)
-RUN pip3 install --no-cache-dir --break-system-packages yt-dlp
+# ── Deno (runtime de JS para resolver desafíos de YouTube) ──
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
+ENV PATH="/usr/local/bin:${PATH}"
 
-# Copiar package.json e instalar dependencias de Node
+# ── yt-dlp nightly (necesario: el stable se queda atrás en días) ──
+RUN pip3 install --no-cache-dir --break-system-packages -U --pre "yt-dlp[default]"
+
+# ── Dependencias de Node ──────────────────────────────
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Copiar el resto del código
+# ── Código ────────────────────────────────────────────
 COPY . .
 
-# Crear carpetas que el server espera
 RUN mkdir -p tmp data
 
 EXPOSE 10000

@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import fsp from 'fs/promises';
 import crypto from 'crypto';
+import os from 'os';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import { drive } from './auth.js';
@@ -19,17 +20,19 @@ await fsp.mkdir(TMP_DIR, { recursive: true }).catch(() => {});
 
 if (!fs.existsSync(COOKIES_FILE)) {
   console.warn(`⚠️  No se encontró ${COOKIES_FILE}`);
-  console.warn(`   Exporta las cookies de YouTube con "Get cookies.txt LOCALLY"`);
 }
 
 // ═══════════════════════════════════════════════════════
-//  ARGS COMPARTIDOS PARA YT-DLP (crítico en servidor)
+//  ARGS COMPARTIDOS PARA YT-DLP
 // ═══════════════════════════════════════════════════════
-// Forzamos el cliente "android" que ofrece formatos accesibles
-// incluso desde IPs de datacenter (Render). Sin esto, YouTube
-// devuelve "Requested format is not available".
+// - Cliente tv,mweb: esquivan el bloqueo de IP de datacenter mejor que "android"
+//   (que además ya no soporta cookies correctamente en 2026).
+// - Deno como runtime JS: requerido por YouTube para resolver desafíos.
+// - remote-components ejs:github: descarga el solver de desafíos EJS bajo demanda.
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', 'youtube:player_client=android,web_safari,tv',
+  '--extractor-args', 'youtube:player_client=tv,mweb,web_safari',
+  '--js-runtimes', 'deno',
+  '--remote-components', 'ejs:github',
   '--no-check-certificates',
   '--prefer-free-formats',
 ];
@@ -49,7 +52,6 @@ function sanitizeDisplayName(name) {
 
 function cleanYouTubeTitle(title) {
   let t = title || '';
-
   const patterns = [
     /\s*[\(\[]\s*(videoclip|video\s*-?\s*clip|clip)\s*(oficial)?\s*[\)\]]/gi,
     /\s*[\(\[]\s*v[ií]deo\s*oficial\s*[\)\]]/gi,
@@ -71,9 +73,7 @@ function cleanYouTubeTitle(title) {
     /[�◆▪▫■□●○▲△▼▽♫♬♪]+/g,
     /\/\/.*$/g,
   ];
-
   for (const p of patterns) t = t.replace(p, '');
-
   t = t.replace(/\s*-\s*Topic\s*$/i, '');
   return t.replace(/\s+/g, ' ').trim();
 }
@@ -107,17 +107,13 @@ function resolveFinalName(yt, userInput) {
   let origin = '';
 
   if (yt.artist && yt.artist !== 'NA' && yt.track && yt.track !== 'NA') {
-    artist = yt.artist;
-    title = yt.track;
-    origin = 'youtube-music';
+    artist = yt.artist; title = yt.track; origin = 'youtube-music';
   } else if (userInput && userInput.includes(' - ')) {
     const [a, ...rest] = userInput.split(' - ');
     const candidateArtist = a.trim();
     const candidateTitle = rest.join(' - ').trim();
     if (looksClean(candidateArtist) && looksClean(candidateTitle)) {
-      artist = candidateArtist;
-      title = candidateTitle;
-      origin = 'hint';
+      artist = candidateArtist; title = candidateTitle; origin = 'hint';
     }
   }
 
@@ -131,7 +127,6 @@ function resolveFinalName(yt, userInput) {
         if (idx > 0) { dashIdx = idx; sepLen = sep.length; break; }
       }
     }
-
     if (dashIdx > 0) {
       artist = cleaned.slice(0, dashIdx).trim();
       title = cleaned.slice(dashIdx + sepLen).trim();
@@ -142,14 +137,11 @@ function resolveFinalName(yt, userInput) {
       else { artist = channel; title = cleaned; }
     }
     origin = 'youtube-parse';
-
     if (!looksClean(artist) || !looksClean(title)) {
       if (userInput) { artist = ''; title = userInput; origin = 'user-input-fallback'; }
     }
   }
-
   if (!title) { title = userInput || 'Sin título'; origin = origin || 'fallback'; }
-
   const combined = artist ? `${artist} - ${title}` : title;
   return { artist, title, displayName: sanitizeDisplayName(combined), origin };
 }
@@ -164,13 +156,27 @@ export function normalizeKey(name) {
 }
 
 // ═══════════════════════════════════════════════════════
+//  COOKIES: copiar a un archivo escribible
+// ═══════════════════════════════════════════════════════
+// yt-dlp escribe de vuelta al archivo de cookies. Si está en un
+// filesystem read-only (como en algunos contenedores), falla.
+// Copiamos a os.tmpdir() (siempre escribible) antes de usarlas.
+async function getWritableCookiesPath() {
+  if (!fs.existsSync(COOKIES_FILE)) return null;
+  const tmpCookies = path.join(os.tmpdir(), `lumi-cookies-${crypto.randomUUID()}.txt`);
+  await fsp.copyFile(COOKIES_FILE, tmpCookies);
+  return tmpCookies;
+}
+
+// ═══════════════════════════════════════════════════════
 //  PROBE
 // ═══════════════════════════════════════════════════════
 
 export async function probeYoutube(query) {
+  const cookies = await getWritableCookiesPath();
   const cmd = [
     'yt-dlp',
-    '--cookies', `"${COOKIES_FILE}"`,
+    ...(cookies ? ['--cookies', `"${cookies}"`] : []),
     '--no-config',
     ...YTDLP_COMMON_ARGS,
     `"ytsearch1:${query.replace(/"/g, '')}"`,
@@ -187,6 +193,8 @@ export async function probeYoutube(query) {
     windowsHide: true,
   });
 
+  if (cookies) await fsp.unlink(cookies).catch(() => {});
+
   const yt = parseYtMetadata(stdout);
   const resolved = resolveFinalName(yt, query);
   return { ...yt, ...resolved };
@@ -200,12 +208,13 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   const jobId = crypto.randomUUID();
   const tmpBase = path.join(TMP_DIR, jobId);
   const outTemplate = `${tmpBase}.%(ext)s`;
+  const cookies = await getWritableCookiesPath();
 
   console.log(`🎵 Buscando en YouTube: "${query}"  [source=${source}]`);
 
   const cmd = [
     'yt-dlp',
-    '--cookies', `"${COOKIES_FILE}"`,
+    ...(cookies ? ['--cookies', `"${cookies}"`] : []),
     '--no-config',
     ...YTDLP_COMMON_ARGS,
     `"ytsearch1:${query.replace(/"/g, '')}"`,
@@ -214,7 +223,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     '--audio-quality', '0',
     '--no-playlist',
     '--no-warnings',
-    '-f', '"bestaudio/best"',
+    '-f', '"bestaudio*/best"',
     '-o', `"${outTemplate}"`,
     '--print', '"@@TITLE@@%(title)s"',
     '--print', '"@@ARTIST@@%(artist)s"',
@@ -227,6 +236,8 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     maxBuffer: 20 * 1024 * 1024,
     windowsHide: true,
   });
+
+  if (cookies) await fsp.unlink(cookies).catch(() => {});
 
   const yt = parseYtMetadata(stdout);
 
@@ -266,10 +277,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
           parents: [FOLDER_ID],
           mimeType: 'image/jpeg',
         },
-        media: {
-          mimeType: 'image/jpeg',
-          body: Readable.from(meta.coverBuffer),
-        },
+        media: { mimeType: 'image/jpeg', body: Readable.from(meta.coverBuffer) },
         fields: 'id',
       });
       coverFileId = coverRes.data.id;
@@ -294,10 +302,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
       parents: [FOLDER_ID],
       properties: fileProperties,
     },
-    media: {
-      mimeType: 'audio/mpeg',
-      body: fs.createReadStream(yt.file),
-    },
+    media: { mimeType: 'audio/mpeg', body: fs.createReadStream(yt.file) },
     fields: 'id, name, size, createdTime, properties',
   });
 
