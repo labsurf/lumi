@@ -221,12 +221,11 @@ button:disabled { background: #2a2a2a; color: #666; cursor: not-allowed; }
 }
 
 /* ═══ Grid de tarjetas ════════════════════════════ */
-#playlist.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1rem;
+#playlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
-
 .card {
   background: #161616;
   border-radius: 12px;
@@ -640,4 +639,300 @@ audio {
   .brand-icon { width: 56px; height: 56px; font-size: 1.5rem; }
   .brand-text h1 { font-size: 2.2rem; }
   .brand-text span { font-size: 0.7rem; letter-spacing: 0.1em; }
+}
+
+/* ═══════════════════════════════════════════════════ */
+/*  PANTALLA DE LOGIN / REGISTRO                       */
+/* ═══════════════════════════════════════════════════ */
+.hidden { display: none !important; }
+
+.auth-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 0%, #1a2b1f 0%, #0a0a0a 60%);
+  padding: 1rem;
+  z-index: 2000;
+}
+
+.auth-card {
+  background: #161616;
+  border: 1px solid #262626;
+  border-radius: 16px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+}
+
+.auth-logo {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.auth-logo .brand-icon {
+  width: 64px;
+  height: 64px;
+  font-size: 1.75rem;
+  margin: 0 auto 0.75rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  box-shadow: 0 10px 32px rgba(29, 185, 84, 0.45);
+}
+
+.auth-logo h1 {
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #fff 0%, #b9b9b9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+}
+
+.auth-logo p {
+  color: #777;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-top: 0.35rem;
+}
+
+.auth-tabs {
+  display: flex;
+  background: #0f0f0f;
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 1.25rem;
+}
+
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  color: #888;
+  padding: 0.6rem 1rem;
+  border-radius: 7px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.15s;
+  border: none;
+  cursor: pointer;
+}
+
+.auth-tab.active {
+  background: #1db954;
+  color: #000;
+}
+
+.auth-field {
+  margin-bottom: 1rem;
+}
+
+.auth-field label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-field label i { color: #1db954; }
+
+.auth-field input {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  background: #0f0f0f;
+  color: #eee;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: #1db954;
+}
+
+.auth-error {
+  min-height: 1.2em;
+  color: #ff4b4b;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.auth-submit {
+  width: 100%;
+  padding: 0.85rem;
+  background: #1db954;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  transition: background 0.15s;
+}
+
+.auth-submit:hover:not(:disabled) { background: #1ed760; }
+.auth-submit:disabled { background: #2a2a2a; color: #666; cursor: not-allowed; }
+
+.auth-footnote {
+  font-size: 0.75rem;
+  color: #666;
+  text-align: center;
+  margin-top: 1.25rem;
+  line-height: 1.4;
+}
+
+.auth-footnote b { color: #1db954; }
+
+/* ═══════════════════════════════════════════════════ */
+/*  HEADER: INFO DE USUARIO Y CUOTA                    */
+/* ═══════════════════════════════════════════════════ */
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.user-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.user-name i { color: #1db954; font-size: 0.85rem; }
+
+.user-quota {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.user-quota i { color: #1db954; font-size: 0.7rem; }
+
+.user-quota.exhausted { color: #ff4b4b; }
+.user-quota.exhausted i { color: #ff4b4b; }
+
+.logout-btn {
+  background: #1a1a1a;
+  color: #888;
+  border: 1px solid #2a2a2a;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 0.9rem;
+}
+
+.logout-btn:hover {
+  background: #252525;
+  color: #ff4b4b;
+  border-color: #3a1a1a;
+}
+
+/* ═══ Ajuste del header para dejar sitio al user-menu ═══ */
+header {
+  display: block;   /* anula el flex centrado anterior */
+  padding: 1.5rem 1.5rem 0;
+}
+
+.header-inner {
+  margin-bottom: 1rem;
+}
+
+.brand {
+  justify-content: flex-start;
+}
+
+/* ═══ Responsive: header en móvil ═══ */
+@media (max-width: 700px) {
+  .header-inner {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .user-info { align-items: center; }
+  .brand { justify-content: center; }
+}
+/* ═══ Secciones agrupadas (Top Descargas / Mis descargas) ═══ */
+.section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #eee;
+}
+
+.section-title i {
+  color: #1db954;
+  font-size: 0.95rem;
+}
+
+.section-title .section-count {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #666;
+  background: #1a1a1a;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  border: 1px solid #262626;
+}
+
+.section-line {
+  height: 1px;
+  background: linear-gradient(90deg, #1db954 0%, #1a1a1a 30%, transparent 100%);
+  opacity: 0.5;
+}
+
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
 }

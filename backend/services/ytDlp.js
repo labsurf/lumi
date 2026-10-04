@@ -25,10 +25,6 @@ if (!fs.existsSync(COOKIES_FILE)) {
 // ═══════════════════════════════════════════════════════
 //  ARGS COMPARTIDOS PARA YT-DLP
 // ═══════════════════════════════════════════════════════
-// - Cliente tv,mweb: esquivan el bloqueo de IP de datacenter mejor que "android"
-//   (que además ya no soporta cookies correctamente en 2026).
-// - Deno como runtime JS: requerido por YouTube para resolver desafíos.
-// - remote-components ejs:github: descarga el solver de desafíos EJS bajo demanda.
 const YTDLP_COMMON_ARGS = [
   '--extractor-args', 'youtube:player_client=tv,mweb,web_safari',
   '--js-runtimes', 'deno',
@@ -158,9 +154,6 @@ export function normalizeKey(name) {
 // ═══════════════════════════════════════════════════════
 //  COOKIES: copiar a un archivo escribible
 // ═══════════════════════════════════════════════════════
-// yt-dlp escribe de vuelta al archivo de cookies. Si está en un
-// filesystem read-only (como en algunos contenedores), falla.
-// Copiamos a os.tmpdir() (siempre escribible) antes de usarlas.
 async function getWritableCookiesPath() {
   if (!fs.existsSync(COOKIES_FILE)) return null;
   const tmpCookies = path.join(os.tmpdir(), `lumi-cookies-${crypto.randomUUID()}.txt`);
@@ -287,6 +280,9 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     }
   }
 
+  // ─── Subir el MP3 a Drive ─────────────────────────────
+  // ⚠️ CAMBIO: ya no guardamos ownerId/ownerUsername en las properties.
+  //    La asociación usuario↔canción vive en user-songs.json.
   const uploadName = `${displayName}.mp3`;
   const fileProperties = {
     source,

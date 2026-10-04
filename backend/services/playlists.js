@@ -1,91 +1,157 @@
-import fs from 'fs/promises';
-import path from 'path';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
+import { loadData, mutate, getCached } from './driveData.js';
+import { drive } from './auth.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.resolve(__dirname, '..', 'data');
-const FILE = path.join(DATA_DIR, 'playlists.json');
+const DATA_FILE = 'playlists.json';
+const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-// ─── Init ─────────────────────────────────────────────
-async function ensureFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(FILE);
-  } catch {
-    await fs.writeFile(FILE, JSON.stringify({ playlists: [], memberships: {} }, null, 2));
-  }
+// ─── Bootstrap ────────────────────────────────────────
+export async function initPlaylists() {
+  await loadData(DATA_FILE, { playlists: [], memberships: {} });
+  console.log('📚 Playlists cargadas');
 }
 
-async function read() {
-  await ensureFile();
-  const raw = await fs.readFile(FILE, 'utf8');
-  return JSON.parse(raw);
+// ─── Helpers ──────────────────────────────────────────
+function data() {
+  return getCached(DATA_FILE);
 }
 
-async function write(data) {
-  await fs.writeFile(FILE, JSON.stringify(data, null, 2));
-}
-
-// ─── Playlists ────────────────────────────────────────
-export async function listPlaylists() {
-  const data = await read();
+// ─── Listar playlists de un usuario ───────────────────
+export async function listPlaylists(userId) {
+  const d = data();
   const counts = {};
-  for (const plIds of Object.values(data.memberships)) {
+  for (const plIds of Object.values(d.memberships)) {
     for (const id of plIds) counts[id] = (counts[id] || 0) + 1;
   }
-  return data.playlists.map((p) => ({ ...p, count: counts[p.id] || 0 }));
+  return d.playlists
+    .filter((p) => p.userId === userId)
+    .map((p) => ({ ...p, count: counts[p.id] || 0 }));
 }
 
-export async function createPlaylist(name) {
-  const data = await read();
+// ─── Crear playlist ───────────────────────────────────
+export async function createPlaylist(userId, name) {
   const pl = {
     id: crypto.randomUUID(),
+    userId,
     name,
     createdAt: new Date().toISOString(),
   };
-  data.playlists.push(pl);
-  await write(data);
+  await mutate(DATA_FILE, (d) => {
+    d.playlists.push(pl);
+    return d;
+  });
   return pl;
 }
 
-export async function deletePlaylist(id) {
-  const data = await read();
-  data.playlists = data.playlists.filter((p) => p.id !== id);
-  for (const fileId of Object.keys(data.memberships)) {
-    data.memberships[fileId] = data.memberships[fileId].filter((pid) => pid !== id);
-    if (data.memberships[fileId].length === 0) delete data.memberships[fileId];
+// ─── Borrar playlist ──────────────────────────────────
+export async function deletePlaylist(userId, id) {
+  const d = data();
+  const pl = d.playlists.find((p) => p.id === id);
+  if (!pl || pl.userId !== userId) throw new Error('Playlist no encontrada');
+
+  await mutate(DATA_FILE, (d) => {
+    d.playlists = d.playlists.filter((p) => p.id !== id);
+    for (const fileId of Object.keys(d.memberships)) {
+      d.memberships[fileId] = d.memberships[fileId].filter((pid) => pid !== id);
+      if (d.memberships[fileId].length === 0) delete d.memberships[fileId];
+    }
+    return d;
+  });
+}
+
+// ─── Añadir track a playlist ──────────────────────────
+export async function addTrackToPlaylist(userId, playlistId, fileId) {
+  const d = data();
+  const pl = d.playlists.find((p) => p.id === playlistId);
+  if (!pl || pl.userId !== userId) throw new Error('Playlist no encontrada');
+
+  await mutate(DATA_FILE, (d) => {
+    if (!d.memberships[fileId]) d.memberships[fileId] = [];
+    if (!d.memberships[fileId].includes(playlistId)) {
+      d.memberships[fileId].push(playlistId);
+    }
+    return d;
+  });
+}
+
+// ─── Quitar track de playlist ─────────────────────────
+export async function removeTrackFromPlaylist(userId, playlistId, fileId) {
+  const d = data();
+  const pl = d.playlists.find((p) => p.id === playlistId);
+  if (!pl || pl.userId !== userId) throw new Error('Playlist no encontrada');
+
+  await mutate(DATA_FILE, (d) => {
+    if (d.memberships[fileId]) {
+      d.memberships[fileId] = d.memberships[fileId].filter((pid) => pid !== playlistId);
+      if (d.memberships[fileId].length === 0) delete d.memberships[fileId];
+    }
+    return d;
+  });
+}
+
+// ─── Obtener membresías filtradas por usuario ─────────
+export async function getMembershipsMap(userId) {
+  const d = data();
+  const userPlaylistIds = new Set(
+    d.playlists.filter((p) => p.userId === userId).map((p) => p.id)
+  );
+  const result = {};
+  for (const [fileId, plIds] of Object.entries(d.memberships)) {
+    const filtered = plIds.filter((id) => userPlaylistIds.has(id));
+    if (filtered.length > 0) result[fileId] = filtered;
   }
-  await write(data);
+  return result;
 }
 
-// ─── Membresías (track ↔ playlists) ───────────────────
-export async function addTrackToPlaylist(playlistId, fileId) {
-  const data = await read();
-  if (!data.memberships[fileId]) data.memberships[fileId] = [];
-  if (!data.memberships[fileId].includes(playlistId)) {
-    data.memberships[fileId].push(playlistId);
-  }
-  await write(data);
-}
-
-export async function removeTrackFromPlaylist(playlistId, fileId) {
-  const data = await read();
-  if (data.memberships[fileId]) {
-    data.memberships[fileId] = data.memberships[fileId].filter((pid) => pid !== playlistId);
-    if (data.memberships[fileId].length === 0) delete data.memberships[fileId];
-  }
-  await write(data);
-}
-
-// ─── Consultas ────────────────────────────────────────
-export async function getMembershipsMap() {
-  const data = await read();
-  return data.memberships;
-}
-
+// ─── Quitar track de todas las playlists ──────────────
 export async function removeTrackFromAllPlaylists(fileId) {
-  const data = await read();
-  delete data.memberships[fileId];
-  await write(data);
+  await mutate(DATA_FILE, (d) => {
+    delete d.memberships[fileId];
+    return d;
+  });
+}
+
+// ─── Crear playlist base al registrarse ───────────────
+export async function createBasePlaylistForUser(userId, username) {
+  try {
+    const d = data();
+    if (d.playlists.find((p) => p.userId === userId)) return null;
+
+    const basePlaylist = {
+      id: crypto.randomUUID(),
+      userId,
+      name: `Base · ${username}`,
+      isBase: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Listar canciones de Drive (las que NO son 'manual')
+    const list = await drive.files.list({
+      q: `'${FOLDER_ID}' in parents and trashed=false and mimeType='audio/mpeg'`,
+      fields: 'files(id, properties)',
+      pageSize: 1000,
+    });
+
+    const chartFiles = (list.data.files || []).filter((f) => {
+      const src = f.properties?.source || 'manual';
+      return src !== 'manual';
+    });
+
+    await mutate(DATA_FILE, (d) => {
+      d.playlists.push(basePlaylist);
+      for (const f of chartFiles) {
+        if (!d.memberships[f.id]) d.memberships[f.id] = [];
+        if (!d.memberships[f.id].includes(basePlaylist.id)) {
+          d.memberships[f.id].push(basePlaylist.id);
+        }
+      }
+      return d;
+    });
+
+    console.log(`📚 Playlist base creada para ${username}: ${chartFiles.length} canciones`);
+    return { ...basePlaylist, count: chartFiles.length };
+  } catch (err) {
+    console.error('Error creando playlist base:', err.message);
+    return null;
+  }
 }
