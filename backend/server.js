@@ -6,9 +6,12 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 
-import { initUsers } from './services/users.js';
+import { initUsers, promoteAdminsFromEnv } from './services/users.js';
 import { initPlaylists } from './services/playlists.js';
 import { initAccessLog } from './services/accessLog.js';
+import { initUserSongs } from './services/userSongs.js';
+import * as us from './services/userSongs.js';
+import { drive } from './services/auth.js';
 
 import authRouter from './routes/auth.js';
 import tracksRouter from './routes/tracks.js';
@@ -16,9 +19,7 @@ import streamRouter from './routes/stream.js';
 import coverRouter from './routes/cover.js';
 import chartsRouter from './routes/charts.js';
 import playlistsRouter from './routes/playlists.js';
-import { initUserSongs } from './services/userSongs.js';
-import * as us from './services/userSongs.js';
-import { drive } from './services/auth.js';
+import adminRouter from './routes/admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +31,8 @@ if (process.env.COOKIES_CONTENT) {
 }
 
 const app = express();
-// Confiar en el proxy de Render para obtener la IP real del cliente
+
+// Confiar en el proxy de Render para obtener la IP real
 app.set('trust proxy', 1);
 
 // ─── CORS ─────────────────────────────────────────────
@@ -64,6 +66,7 @@ app.use('/api/cover', coverRouter);
 app.use('/api/tracks', tracksRouter);
 app.use('/api/charts', chartsRouter);
 app.use('/api/playlists', playlistsRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, timestamp: Date.now() });
@@ -118,6 +121,7 @@ const PORT = process.env.PORT || 3000;
   try {
     console.log('\n🚀 Iniciando LuMi...\n');
     await initUsers();
+    await promoteAdminsFromEnv();
     await initPlaylists();
     await initAccessLog();
     await initUserSongs();

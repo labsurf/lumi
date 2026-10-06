@@ -10,7 +10,7 @@ const API = (() => {
 console.log(`🌐 Frontend: ${window.location.origin}`);
 console.log(`🔗 Backend: ${API}`);
 
-// ─── Estado de autenticación ─────────────────────────
+// ─── Auth state ──────────────────────────────────────
 const TOKEN_KEY = 'lumi_token';
 let currentUser = null;
 
@@ -82,6 +82,17 @@ const authSubmit = document.getElementById('authSubmit');
 const userNameEl = document.getElementById('userName');
 const userQuotaEl = document.getElementById('userQuota');
 const logoutBtn = document.getElementById('logoutBtn');
+
+// Admin
+const adminTab = document.getElementById('adminTab');
+const usersTable = document.getElementById('usersTable');
+const refreshUsersBtn = document.getElementById('refreshUsersBtn');
+const adminStatus = document.getElementById('adminStatus');
+const userModal = document.getElementById('userModal');
+const userModalTitle = document.getElementById('userModalTitle');
+const userModalBody = document.getElementById('userModalBody');
+const userModalSave = document.getElementById('userModalSave');
+const userModalCancel = document.getElementById('userModalCancel');
 
 let authMode = 'login';
 
@@ -222,6 +233,7 @@ document.querySelectorAll('.tab').forEach((tab) => {
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById(`view-${tab.dataset.tab}`).classList.add('active');
+    if (tab.dataset.tab === 'admin') loadUsers();
   };
 });
 
@@ -268,7 +280,7 @@ async function loadPlaylists() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  CREAR TARJETA (helper reutilizable)
+//  CREAR TARJETA
 // ═══════════════════════════════════════════════════════
 function createCard(t, globalIndex) {
   const isActive = currentIndex >= 0 && filtered[currentIndex]?.id === t.id;
@@ -332,29 +344,18 @@ function render() {
     return;
   }
 
-  // ─── Agrupar canciones ─────────────────────────────
   const charts = filtered.filter((t) => t.source !== 'manual');
   const manual = filtered.filter((t) => t.source === 'manual');
 
   const sections = [];
   if (charts.length > 0) {
-    sections.push({
-      title: 'Top Descargas',
-      icon: 'fa-chart-line',
-      items: charts,
-    });
+    sections.push({ title: 'Top Descargas', icon: 'fa-chart-line', items: charts });
   }
   if (manual.length > 0) {
-    sections.push({
-      title: 'Mis descargas',
-      icon: 'fa-user',
-      items: manual,
-    });
+    sections.push({ title: 'Mis descargas', icon: 'fa-user', items: manual });
   }
 
-  // ─── Renderizar cada sección ───────────────────────
   sections.forEach((section) => {
-    // Encabezado
     const header = document.createElement('div');
     header.className = 'section-header';
     header.innerHTML = `
@@ -367,7 +368,6 @@ function render() {
     `;
     playlistEl.appendChild(header);
 
-    // Grid de la sección
     const grid = document.createElement('div');
     grid.className = 'section-grid';
 
@@ -379,7 +379,6 @@ function render() {
     playlistEl.appendChild(grid);
   });
 
-  // ─── Listeners globales (delete / add) ─────────────
   playlistEl.querySelectorAll('.delete-btn').forEach((btn) => {
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -755,11 +754,275 @@ function pollDownloadProgress(expectedCount) {
 }
 
 // ═══════════════════════════════════════════════════════
+//  ADMIN: Gestión de usuarios
+// ═══════════════════════════════════════════════════════
+let allUsers = [];
+
+async function loadUsers() {
+  try {
+    adminStatus.innerHTML = `${ICONS.loading} Cargando usuarios...`;
+    adminStatus.style.color = '#1db954';
+
+    const res = await apiFetch('/admin/users');
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || `Error ${res.status}`);
+    }
+
+    if (!Array.isArray(data)) {
+      console.error('Respuesta inesperada:', data);
+      throw new Error('El servidor no devolvió una lista de usuarios');
+    }
+
+    allUsers = data;
+    renderUsersTable();
+    adminStatus.innerHTML = `${ICONS.ok} ${allUsers.length} usuarios`;
+  } catch (err) {
+    adminStatus.style.color = '#ff4b4b';
+    adminStatus.innerHTML = `${ICONS.error} ${err.message}`;
+  }
+}
+function renderUsersTable() {
+  usersTable.innerHTML = '';
+
+  if (allUsers.length === 0) {
+    usersTable.innerHTML = '<p style="opacity:0.5;padding:1rem;">Sin usuarios.</p>';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Usuario</th>
+        <th>Rol</th>
+        <th>Cuota</th>
+        <th>Creado</th>
+        <th style="text-align:right;">Acciones</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  const tbody = table.querySelector('tbody');
+
+  allUsers.forEach((u) => {
+    const remaining = u.downloadQuota - u.downloadCount;
+    const pct = u.downloadQuota > 0
+      ? Math.max(0, Math.min(100, (remaining / u.downloadQuota) * 100))
+      : 0;
+    const exhausted = remaining <= 0;
+    const isSelf = u.id === currentUser?.id;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div class="user-cell">
+          <i class="fa-solid fa-circle-user" style="color:#1db954;"></i>
+          <span>${u.username}${isSelf ? ' <span style="color:#666;font-size:.75rem;">(tú)</span>' : ''}</span>
+        </div>
+      </td>
+      <td>
+        <span class="role-badge ${u.role}">
+          ${u.role === 'admin' ? '<i class="fa-solid fa-crown"></i>' : '<i class="fa-solid fa-user"></i>'}
+          ${u.role}
+        </span>
+      </td>
+      <td>
+        <div class="quota-bar">
+          <div class="quota-bar-track">
+            <div class="quota-bar-fill ${exhausted ? 'exhausted' : ''}" style="width:${pct}%"></div>
+          </div>
+          <span class="quota-text">${remaining}/${u.downloadQuota}</span>
+        </div>
+      </td>
+      <td style="color:#777;font-size:.8rem;">${new Date(u.createdAt).toLocaleDateString()}</td>
+      <td>
+        <div class="actions">
+          <button class="btn-icon" data-action="quota" data-id="${u.id}" title="Editar cuota">
+            <i class="fa-solid fa-sliders"></i>
+          </button>
+          <button class="btn-icon" data-action="password" data-id="${u.id}" title="Resetear contraseña">
+            <i class="fa-solid fa-key"></i>
+          </button>
+          <button class="btn-icon" data-action="role" data-id="${u.id}" title="Cambiar rol">
+            <i class="fa-solid fa-shield-halved"></i>
+          </button>
+          <button class="btn-icon danger" data-action="delete" data-id="${u.id}" title="Eliminar" ${isSelf ? 'disabled' : ''}>
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  usersTable.appendChild(table);
+
+  usersTable.querySelectorAll('button[data-action]').forEach((btn) => {
+    btn.onclick = () => handleUserAction(btn.dataset.action, btn.dataset.id);
+  });
+}
+
+function handleUserAction(action, userId) {
+  const user = allUsers.find((u) => u.id === userId);
+  if (!user) return;
+
+  if (action === 'quota') return openQuotaModal(user);
+  if (action === 'password') return openPasswordModal(user);
+  if (action === 'role') return openRoleModal(user);
+  if (action === 'delete') return confirmDeleteUser(user);
+}
+
+// ─── Modal: cuota ─────────────────────────────────────
+function openQuotaModal(user) {
+  userModalTitle.textContent = `Cuota de ${user.username}`;
+  userModalBody.innerHTML = `
+    <div class="admin-field">
+      <label>Cuota total (descargas)</label>
+      <input type="number" id="modalQuotaInput" min="0" value="${user.downloadQuota}">
+      <p class="hint">Descargas ya usadas: ${user.downloadCount}</p>
+    </div>
+  `;
+  userModal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('modalQuotaInput')?.focus(), 50);
+
+  userModalSave.onclick = async () => {
+    const quota = parseInt(document.getElementById('modalQuotaInput').value, 10);
+    if (isNaN(quota) || quota < 0) return alert('Cuota inválida');
+
+    userModalSave.disabled = true;
+    try {
+      const res = await apiFetch(`/admin/users/${user.id}/quota`, {
+        method: 'PUT',
+        body: JSON.stringify({ quota }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      userModal.classList.add('hidden');
+      adminStatus.innerHTML = `${ICONS.ok} Cuota actualizada`;
+      adminStatus.style.color = '#1db954';
+      await loadUsers();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      userModalSave.disabled = false;
+    }
+  };
+}
+
+// ─── Modal: reset password ────────────────────────────
+function openPasswordModal(user) {
+  userModalTitle.textContent = `Resetear contraseña de ${user.username}`;
+  userModalBody.innerHTML = `
+    <div class="admin-field">
+      <label>Nueva contraseña</label>
+      <input type="text" id="modalPasswordInput" placeholder="mínimo 4 caracteres" autocomplete="off">
+      <p class="hint">Comunícasela al usuario por un canal seguro.</p>
+    </div>
+  `;
+  userModal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('modalPasswordInput')?.focus(), 50);
+
+  userModalSave.onclick = async () => {
+    const newPassword = document.getElementById('modalPasswordInput').value;
+    if (!newPassword || newPassword.length < 4) return alert('Mínimo 4 caracteres');
+
+    userModalSave.disabled = true;
+    try {
+      const res = await apiFetch(`/admin/users/${user.id}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      userModal.classList.add('hidden');
+      adminStatus.innerHTML = `${ICONS.ok} Contraseña actualizada para <b>${user.username}</b>`;
+      adminStatus.style.color = '#1db954';
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      userModalSave.disabled = false;
+    }
+  };
+}
+
+// ─── Modal: rol ───────────────────────────────────────
+function openRoleModal(user) {
+  userModalTitle.textContent = `Rol de ${user.username}`;
+  userModalBody.innerHTML = `
+    <div class="admin-field">
+      <label>Rol</label>
+      <select id="modalRoleSelect">
+        <option value="user" ${user.role === 'user' ? 'selected' : ''}>Usuario (user)</option>
+        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrador (admin)</option>
+      </select>
+      <p class="hint">Los admin pueden gestionar usuarios y ver la pestaña Admin.</p>
+    </div>
+  `;
+  userModal.classList.remove('hidden');
+
+  userModalSave.onclick = async () => {
+    const role = document.getElementById('modalRoleSelect').value;
+
+    userModalSave.disabled = true;
+    try {
+      const res = await apiFetch(`/admin/users/${user.id}/role`, {
+        method: 'PUT',
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      userModal.classList.add('hidden');
+      adminStatus.innerHTML = `${ICONS.ok} Rol actualizado`;
+      adminStatus.style.color = '#1db954';
+      await loadUsers();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      userModalSave.disabled = false;
+    }
+  };
+}
+
+// ─── Confirmar eliminar ───────────────────────────────
+async function confirmDeleteUser(user) {
+  if (!confirm(`¿Eliminar definitivamente a "${user.username}"?\n\nSe borrarán también sus playlists y asociaciones de canciones.`)) return;
+
+  try {
+    const res = await apiFetch(`/admin/users/${user.id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    adminStatus.innerHTML = `${ICONS.ok} Usuario eliminado`;
+    adminStatus.style.color = '#1db954';
+    await loadUsers();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// ─── Eventos modal ────────────────────────────────────
+refreshUsersBtn.onclick = () => loadUsers();
+userModalCancel.onclick = () => userModal.classList.add('hidden');
+userModal.onclick = (e) => {
+  if (e.target === userModal) userModal.classList.add('hidden');
+};
+
+// ═══════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════
 async function bootApp() {
   showApp();
   await refreshUser();
+
+  // Mostrar tab Admin solo si el usuario es admin
+  if (currentUser?.role === 'admin') {
+    adminTab.classList.remove('hidden');
+  } else {
+    adminTab.classList.add('hidden');
+  }
+
   await loadPlaylists();
   await loadTracks();
   await loadSources();

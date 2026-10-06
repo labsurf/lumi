@@ -103,7 +103,92 @@ export async function getUserById(id) {
     role: user.role || 'user',
   };
 }
+// ─── Admin: bootstrap desde env ───────────────────────
+export async function promoteAdminsFromEnv() {
+  const list = (process.env.ADMIN_USERNAMES || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 
+  if (list.length === 0) return;
+
+  let changed = 0;
+  await mutate(DATA_FILE, (d) => {
+    for (const name of list) {
+      const u = d.users.find((x) => x.username === name);
+      if (u && u.role !== 'admin') {
+        u.role = 'admin';
+        changed++;
+      }
+    }
+    return d;
+  });
+  if (changed > 0) console.log(`👑 ${changed} usuario(s) promovidos a admin`);
+}
+
+// ─── Admin: listar todos los usuarios ─────────────────
+export async function listAllUsers() {
+  return users().map((u) => ({
+    id: u.id,
+    username: u.username,
+    role: u.role || 'user',
+    downloadCount: u.downloadCount,
+    downloadQuota: u.downloadQuota,
+    createdAt: u.createdAt,
+  }));
+}
+
+// ─── Admin: resetear contraseña ───────────────────────
+export async function adminResetPassword(userId, newPassword) {
+  if (!newPassword || newPassword.length < 4) {
+    throw new Error('La contraseña debe tener al menos 4 caracteres');
+  }
+  const hash = await bcrypt.hash(newPassword, 10);
+  await mutate(DATA_FILE, (d) => {
+    const u = d.users.find((x) => x.id === userId);
+    if (!u) throw new Error('Usuario no encontrado');
+    u.passwordHash = hash;
+    return d;
+  });
+}
+
+// ─── Admin: actualizar cuota ──────────────────────────
+export async function adminUpdateQuota(userId, newQuota) {
+  const quota = parseInt(newQuota, 10);
+  if (isNaN(quota) || quota < 0) throw new Error('Cuota inválida');
+  await mutate(DATA_FILE, (d) => {
+    const u = d.users.find((x) => x.id === userId);
+    if (!u) throw new Error('Usuario no encontrado');
+    u.downloadQuota = quota;
+    return d;
+  });
+  return await getUserById(userId);
+}
+
+// ─── Admin: cambiar rol ───────────────────────────────
+export async function adminUpdateRole(userId, newRole) {
+  if (!['user', 'admin'].includes(newRole)) throw new Error('Rol inválido');
+  await mutate(DATA_FILE, (d) => {
+    const u = d.users.find((x) => x.id === userId);
+    if (!u) throw new Error('Usuario no encontrado');
+    u.role = newRole;
+    return d;
+  });
+  return await getUserById(userId);
+}
+
+// ─── Admin: eliminar usuario ──────────────────────────
+export async function adminDeleteUser(userId) {
+  let deleted = null;
+  await mutate(DATA_FILE, (d) => {
+    const u = d.users.find((x) => x.id === userId);
+    if (!u) throw new Error('Usuario no encontrado');
+    deleted = { username: u.username };
+    d.users = d.users.filter((x) => x.id !== userId);
+    return d;
+  });
+  return deleted;
+}
 // ─── Cuota ────────────────────────────────────────────
 export async function checkQuota(userId, amount = 1) {
   const user = await getUserById(userId);

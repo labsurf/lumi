@@ -89,6 +89,10 @@
             <i class="fa-solid fa-chart-simple"></i>
             <span>Charts</span>
           </button>
+          <button class="tab hidden" id="adminTab" data-tab="admin">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Admin</span>
+          </button>
         </div>
       </nav>
     </header>
@@ -155,6 +159,22 @@
       <div id="chartList" class="chart-list"></div>
     </main>
 
+    <!-- Vista: Admin -->
+    <main id="view-admin" class="view">
+      <div class="toolbar">
+        <h2 style="font-size: 1.1rem; color: #eee; display:flex; align-items:center; gap:.5rem; margin:0;">
+          <i class="fa-solid fa-users" style="color:#1db954;"></i>
+          Gestión de usuarios
+        </h2>
+        <button id="refreshUsersBtn" class="btn-secondary">
+          <i class="fa-solid fa-rotate"></i>
+          <span>Refrescar</span>
+        </button>
+      </div>
+      <div id="adminStatus"></div>
+      <div id="usersTable" class="users-table"></div>
+    </main>
+
     <!-- Modal: Añadir a lista -->
     <div id="playlistModal" class="modal hidden">
       <div class="modal-content">
@@ -172,6 +192,24 @@
           <button id="closeModalBtn" class="btn-secondary">
             <i class="fa-solid fa-xmark"></i>
             <span>Cerrar</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Editar usuario (admin) -->
+    <div id="userModal" class="modal hidden">
+      <div class="modal-content">
+        <h3><i class="fa-solid fa-user-gear"></i> <span id="userModalTitle">Editar usuario</span></h3>
+        <div id="userModalBody"></div>
+        <div class="modal-actions" style="gap: 0.5rem; justify-content: flex-end;">
+          <button id="userModalCancel" class="btn-secondary">
+            <i class="fa-solid fa-xmark"></i>
+            <span>Cancelar</span>
+          </button>
+          <button id="userModalSave">
+            <i class="fa-solid fa-check"></i>
+            <span>Guardar</span>
           </button>
         </div>
       </div>
