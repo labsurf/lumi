@@ -1042,28 +1042,53 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 
 function showIosInstructions() {
+  const isChromeIOS = /crios|fxios|edgios/i.test(navigator.userAgent);
+
+  if (isChromeIOS) {
+    alert(
+      '⚠️ Estás usando Chrome en iPhone\n\n' +
+      'Apple no permite instalar apps desde Chrome en iOS.\n\n' +
+      'Por favor:\n' +
+      '1. Abre esta misma página en Safari\n' +
+      '2. Toca Compartir (⬆️) → "Añadir a pantalla de inicio"\n\n' +
+      'Solo Safari puede instalar LuMi en iPhone.'
+    );
+    return;
+  }
+
   alert(
     '📱 Para instalar LuMi en tu iPhone:\n\n' +
-    '1. Toca el botón "Compartir" (⬆️) en Safari\n' +
-    '2. Desplázate y selecciona "Añadir a pantalla de inicio"\n' +
-    '3. Confirma el nombre "LuMi" y toca "Añadir"\n\n' +
-    '¡Listo! La app aparecerá en tu pantalla de inicio.'
+    '1. Toca el botón "Compartir" (⬆️) en la barra inferior de Safari\n' +
+    '2. Desplázate hacia abajo\n' +
+    '3. Toca "Añadir a pantalla de inicio"\n' +
+    '4. Confirma el nombre "LuMi" → "Añadir"\n\n' +
+    '✅ Listo, verás el ícono de LuMi en tu pantalla de inicio.'
   );
 }
 
 function showInstallButton() {
   const platform = getPlatform();
+  const isChromeIOS = /crios|fxios|edgios/i.test(navigator.userAgent);
 
   if (isStandalone()) {
     console.log('[PWA] Ya está instalada como app');
     return;
   }
 
+  // iOS: mostrar botón siempre (incluso en Chrome, para avisar)
   if (platform === 'ios') {
     installBtn.classList.remove('hidden');
     installBtn.onclick = showIosInstructions;
+    if (isChromeIOS) {
+      // Cambiar el texto del botón para indicar la limitación
+      installBtn.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>Cómo instalar</span>';
+    }
     console.log('[PWA] Mostrando botón para iOS');
-  } else if (deferredPrompt) {
+    return;
+  }
+
+  // Android/PC con evento capturado
+  if (deferredPrompt) {
     installBtn.classList.remove('hidden');
     installBtn.onclick = async () => {
       deferredPrompt.prompt();
