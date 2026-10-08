@@ -673,6 +673,7 @@ button:disabled { background: #2a2a2a; color: #666; cursor: not-allowed; }
   gap: 1rem;
   flex-wrap: wrap;
   backdrop-filter: blur(10px);
+  z-index: 800;
 }
 
 .player-info { flex: 1; min-width: 200px; }
@@ -1031,6 +1032,40 @@ audio {
   margin-top: 0.3rem;
 }
 
+/* ═══ Botón de Instalación PWA ═══ */
+.install-btn {
+  position: fixed;
+  bottom: 100px;
+  right: 1.5rem;
+  z-index: 900;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+  color: #000;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border: none;
+  border-radius: 50px;
+  box-shadow: 0 8px 24px rgba(29, 185, 84, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  transition: all 0.2s ease;
+  animation: pulse-install 2s infinite;
+}
+
+.install-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(29, 185, 84, 0.6);
+}
+
+.install-btn i { font-size: 1rem; }
+
+@keyframes pulse-install {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
 /* ═══ Responsive ═════════════════════════════════ */
 @media (max-width: 700px) {
   .toolbar { flex-direction: column; align-items: stretch; }
@@ -1051,4 +1086,11 @@ audio {
   .brand-text span { font-size: 0.7rem; letter-spacing: 0.1em; }
 
   .users-table { overflow-x: auto; }
+
+  .install-btn {
+    bottom: 90px;
+    right: 1rem;
+    padding: 0.65rem 1rem;
+    font-size: 0.8rem;
+  }
 }

@@ -10,6 +10,15 @@ const API = (() => {
 console.log(`🌐 Frontend: ${window.location.origin}`);
 console.log(`🔗 Backend: ${API}`);
 
+// ─── Registrar Service Worker (PWA) ───────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then((reg) => console.log('✅ SW registrado:', reg.scope))
+      .catch((err) => console.warn('⚠️ SW error:', err));
+  });
+}
+
 // ─── Auth state ──────────────────────────────────────
 const TOKEN_KEY = 'lumi_token';
 let currentUser = null;
@@ -93,6 +102,9 @@ const userModalTitle = document.getElementById('userModalTitle');
 const userModalBody = document.getElementById('userModalBody');
 const userModalSave = document.getElementById('userModalSave');
 const userModalCancel = document.getElementById('userModalCancel');
+
+// PWA
+const installBtn = document.getElementById('installBtn');
 
 let authMode = 'login';
 
@@ -783,6 +795,7 @@ async function loadUsers() {
     adminStatus.innerHTML = `${ICONS.error} ${err.message}`;
   }
 }
+
 function renderUsersTable() {
   usersTable.innerHTML = '';
 
@@ -875,7 +888,6 @@ function handleUserAction(action, userId) {
   if (action === 'delete') return confirmDeleteUser(user);
 }
 
-// ─── Modal: cuota ─────────────────────────────────────
 function openQuotaModal(user) {
   userModalTitle.textContent = `Cuota de ${user.username}`;
   userModalBody.innerHTML = `
@@ -912,7 +924,6 @@ function openQuotaModal(user) {
   };
 }
 
-// ─── Modal: reset password ────────────────────────────
 function openPasswordModal(user) {
   userModalTitle.textContent = `Resetear contraseña de ${user.username}`;
   userModalBody.innerHTML = `
@@ -948,7 +959,6 @@ function openPasswordModal(user) {
   };
 }
 
-// ─── Modal: rol ───────────────────────────────────────
 function openRoleModal(user) {
   userModalTitle.textContent = `Rol de ${user.username}`;
   userModalBody.innerHTML = `
@@ -986,7 +996,6 @@ function openRoleModal(user) {
   };
 }
 
-// ─── Confirmar eliminar ───────────────────────────────
 async function confirmDeleteUser(user) {
   if (!confirm(`¿Eliminar definitivamente a "${user.username}"?\n\nSe borrarán también sus playlists y asociaciones de canciones.`)) return;
 
@@ -1002,12 +1011,78 @@ async function confirmDeleteUser(user) {
   }
 }
 
-// ─── Eventos modal ────────────────────────────────────
 refreshUsersBtn.onclick = () => loadUsers();
 userModalCancel.onclick = () => userModal.classList.add('hidden');
 userModal.onclick = (e) => {
   if (e.target === userModal) userModal.classList.add('hidden');
 };
+
+// ═══════════════════════════════════════════════════════
+//  PWA: Instalación multiplataforma
+// ═══════════════════════════════════════════════════════
+let deferredPrompt = null;
+
+function getPlatform() {
+  const ua = navigator.userAgent.toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return 'ios';
+  if (/android/.test(ua)) return 'android';
+  return 'desktop';
+}
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true;
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  console.log('[PWA] beforeinstallprompt capturado');
+  showInstallButton();
+});
+
+function showIosInstructions() {
+  alert(
+    '📱 Para instalar LuMi en tu iPhone:\n\n' +
+    '1. Toca el botón "Compartir" (⬆️) en Safari\n' +
+    '2. Desplázate y selecciona "Añadir a pantalla de inicio"\n' +
+    '3. Confirma el nombre "LuMi" y toca "Añadir"\n\n' +
+    '¡Listo! La app aparecerá en tu pantalla de inicio.'
+  );
+}
+
+function showInstallButton() {
+  const platform = getPlatform();
+
+  if (isStandalone()) {
+    console.log('[PWA] Ya está instalada como app');
+    return;
+  }
+
+  if (platform === 'ios') {
+    installBtn.classList.remove('hidden');
+    installBtn.onclick = showIosInstructions;
+    console.log('[PWA] Mostrando botón para iOS');
+  } else if (deferredPrompt) {
+    installBtn.classList.remove('hidden');
+    installBtn.onclick = async () => {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`[PWA] Instalación: ${outcome}`);
+      if (outcome === 'accepted') {
+        installBtn.classList.add('hidden');
+      }
+      deferredPrompt = null;
+    };
+    console.log('[PWA] Mostrando botón para Android/PC');
+  }
+}
+
+window.addEventListener('appinstalled', () => {
+  console.log('[PWA] ¡App instalada!');
+  installBtn.classList.add('hidden');
+  deferredPrompt = null;
+});
 
 // ═══════════════════════════════════════════════════════
 //  BOOT
@@ -1016,7 +1091,6 @@ async function bootApp() {
   showApp();
   await refreshUser();
 
-  // Mostrar tab Admin solo si el usuario es admin
   if (currentUser?.role === 'admin') {
     adminTab.classList.remove('hidden');
   } else {
@@ -1027,6 +1101,11 @@ async function bootApp() {
   await loadTracks();
   await loadSources();
   loadChartBtn.click();
+
+  // PWA: mostrar botón de instalación tras un momento
+  setTimeout(() => {
+    if (!isStandalone()) showInstallButton();
+  }, 1500);
 }
 
 (async () => {
