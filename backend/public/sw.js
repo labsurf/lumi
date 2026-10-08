@@ -1,9 +1,9 @@
-const CACHE_NAME = 'lumi-v2';   // ← subimos de v1 a v2
+const CACHE_NAME = 'lumi-v3';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/player.js',
+  './',
+  './index.html',
+  './style.css',
+  './player.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'
 ];
 
@@ -33,21 +33,24 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // 🚫 NO interceptar: API, audio, manifest, screenshots, iconos
+  // No interceptar: API, manifest, screenshots, iconos
   if (
-    url.pathname.startsWith('/api/') ||
-    url.pathname === '/manifest.json' ||
-    url.pathname.startsWith('/screenshot-') ||
-    url.pathname.startsWith('/icon-') ||
-    url.pathname === '/apple-touch-icon.png'
+    url.pathname.includes('/api/') ||
+    url.pathname.endsWith('manifest.json') ||
+    url.pathname.includes('screenshot-') ||
+    url.pathname.includes('icon-') ||
+    url.pathname.includes('apple-touch-icon')
   ) {
-    return; // Dejar pasar sin interceptar
+    return;
   }
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response.ok && STATIC_ASSETS.includes(url.pathname)) {
+        const url2 = new URL(event.request.url);
+        const pathname = url2.pathname;
+        const isStatic = STATIC_ASSETS.some(a => pathname.endsWith(a.replace('./', '')));
+        if (response.ok && isStatic) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseClone);
@@ -57,7 +60,7 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         return caches.match(event.request).then((cached) => {
-          return cached || caches.match('/index.html');
+          return cached || caches.match('./index.html');
         });
       })
   );
