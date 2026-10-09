@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lumi-v3';
+const CACHE_NAME = 'lumi-v10';
 const STATIC_ASSETS = [
   './',
   './index.html',
