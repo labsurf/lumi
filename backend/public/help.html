@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ayuda — LuMi</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231db954'/%3E%3Ctext x='50' y='72' font-size='58' text-anchor='middle' fill='%23000' font-weight='900' font-family='system-ui'%3ELM%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0d0d0d;
+      color: #eee;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    /* ═══ Header ═══ */
+    header {
+      background: linear-gradient(180deg, #141414 0%, #101010 100%);
+      border-bottom: 1px solid #1a1a1a;
+      padding: 1.5rem 1.5rem 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      text-decoration: none;
+      color: inherit;
+      flex: 1;
+    }
+
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      font-size: 1.3rem;
+      box-shadow: 0 6px 20px rgba(29, 185, 84, 0.35);
+      flex: none;
+    }
+
+    .brand-text h1 {
+      font-size: 1.5rem;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #fff 0%, #b9b9b9 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1;
+    }
+
+    .brand-text span {
+      font-size: 0.7rem;
+      color: #777;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .back-btn {
+      background: #1a1a1a;
+      color: #ddd;
+      border: 1px solid #2a2a2a;
+      padding: 0.55rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.15s;
+    }
+
+    .back-btn:hover {
+      background: #252525;
+      color: #fff;
+      border-color: #333;
+    }
+
+    /* ═══ Contenido ═══ */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 2rem 0 3rem;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 2.5rem;
+    }
+
+    .hero i {
+      font-size: 3rem;
+      color: #1db954;
+      margin-bottom: 1rem;
+    }
+
+    .hero h2 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      color: #888;
+      font-size: 1rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ═══ Índice ═══ */
+    .toc {
+      background: #161616;
+      border: 1px solid #1f1f1f;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 3rem;
+    }
+
+    .toc h3 {
+      font-size: 0.85rem;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .toc ol {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 0.3rem;
+    }
+
+    .toc li a {
+      color: #bbb;
+      text-decoration: none;
+      font-size: 0.9rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      transition: all 0.15s;
+    }
+
+    .toc li a:hover {
+      background: #1f1f1f;
+      color: #1ed760;
+    }
+
+    .toc li a i {
+      color: #1db954;
+      font-size: 0.85rem;
+      width: 16px;
+    }
+
+    /* ═══ Secciones ═══ */
+    section {
+      margin-bottom: 3rem;
+      scroll-margin-top: 100px;
+    }
+
+    section > h2 {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid rgba(29, 185, 84, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      letter-spacing: -0.02em;
+    }
+
+    section > h2 i {
+      color: #1db954;
+      font-size: 1.2rem;
+      width: 28px;
+      text-align: center;
+    }
+
+    section p {
+      color: #bbb;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+    }
+
+    section strong {
+      color: #eee;
+      font-weight: 700;
+    }
+
+    /* ═══ Pasos ═══ */
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      margin-bottom: 1.25rem;
+    }
+
+    .steps li {
+      counter-increment: step;
+      position: relative;
+      padding: 0.75rem 0 0.75rem 3rem;
+      color: #bbb;
+      font-size: 0.95rem;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .steps li:last-child { border-bottom: none; }
+
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0.85rem;
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+      color: #000;
+      font-weight: 800;
+      font-size: 0.85rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ═══ Tips / Notas ═══ */
+    .tip {
+      background: rgba(29, 185, 84, 0.08);
+      border-left: 3px solid #1db954;
+      padding: 0.85rem 1.15rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: #b8d7c2;
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .tip i {
+      color: #1db954;
+      font-size: 1rem;
+      flex: none;
+      margin-top: 0.15rem;
+    }
+
+    .tip.warn {
+      background: rgba(255, 184, 77, 0.08);
+      border-left-color: #ffb84d;
+      color: #e6c58a;
+    }
+
+    .tip.warn i { color: #ffb84d; }
+
+    .tip.info {
+      background: rgba(14, 165, 233, 0.08);
+      border-left-color: #0ea5e9;
+      color: #a3cfe8;
+    }
+
+    .tip.info i { color: #0ea5e9; }
+
+    /* ═══ Cards de plataforma ═══ */
+    .platform-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+
+    .platform-card {
+      background: #161616;
+      border: 1px solid #1f1f1f;
+      border-radius: 10px;
+      padding: 1.25rem;
+      transition: all 0.15s;
+    }
+
+    .platform-card:hover {
+      border-color: rgba(29, 185, 84, 0.4);
+      background: #1a1a1a;
+    }
+
+    .platform-card h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .platform-card h4 i {
+      color: #1db954;
+      font-size: 1.1rem;
+    }
+
+    .platform-card p {
+      font-size: 0.85rem;
+      color: #888;
+      margin: 0;
+    }
+
+    /* ═══ Preguntas frecuentes ═══ */
+    details {
+      background: #161616;
+      border: 1px solid #1f1f1f;
+      border-radius: 10px;
+      margin-bottom: 0.6rem;
+      overflow: hidden;
+      transition: all 0.15s;
+    }
+
+    details[open] {
+      border-color: rgba(29, 185, 84, 0.4);
+    }
+
+    summary {
+      padding: 1rem 1.25rem;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #eee;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      list-style: none;
+      transition: background 0.15s;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary:hover { background: #1a1a1a; }
+
+    summary::after {
+      content: '\f078';
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+      font-size: 0.75rem;
+      color: #666;
+      transition: transform 0.2s;
+    }
+
+    details[open] summary::after {
+      transform: rotate(180deg);
+      color: #1db954;
+    }
+
+    details > div {
+      padding: 0 1.25rem 1.25rem;
+      color: #aaa;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    /* ═══ Footer ═══ */
+    footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      border-top: 1px solid #1a1a1a;
+      color: #666;
+      font-size: 0.8rem;
+    }
+
+    footer i { color: #1db954; }
+
+    /* ═══ Responsive ═══ */
+    @media (max-width: 600px) {
+      .hero h2 { font-size: 1.5rem; }
+      section > h2 { font-size: 1.2rem; }
+      .toc ol { grid-template-columns: 1fr; }
+      main { padding: 1.5rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <a href="/" class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-headphones-simple"></i>
+        </div>
+        <div class="brand-text">
+          <h1>LuMi</h1>
+          <span>Centro de ayuda</span>
+        </div>
+      </a>
+      <a href="/" class="back-btn">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>Volver</span>
+      </a>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- HERO -->
+    <div class="hero">
+      <i class="fa-solid fa-circle-question"></i>
+      <h2>¿Cómo funciona LuMi?</h2>
+      <p>Guía rápida para aprovechar todas las funciones de tu reproductor personal.</p>
+    </div>
+
+    <!-- ÍNDICE -->
+    <div class="toc">
+      <h3><i class="fa-solid fa-list"></i> Contenido</h3>
+      <ol>
+        <li><a href="#intro"><i class="fa-solid fa-music"></i> ¿Qué es LuMi?</a></li>
+        <li><a href="#cuenta"><i class="fa-solid fa-user"></i> Crear cuenta e iniciar sesión</a></li>
+        <li><a href="#biblioteca"><i class="fa-solid fa-compact-disc"></i> Tu biblioteca</a></li>
+        <li><a href="#descargar"><i class="fa-solid fa-download"></i> Descargar música</a></li>
+        <li><a href="#charts"><i class="fa-solid fa-chart-simple"></i> Charts musicales</a></li>
+        <li><a href="#listas"><i class="fa-solid fa-list-check"></i> Listas de reproducción</a></li>
+        <li><a href="#cuota"><i class="fa-solid fa-cloud-arrow-down"></i> Cuota de descargas</a></li>
+        <li><a href="#instalar"><i class="fa-solid fa-mobile-screen"></i> Instalar como app</a></li>
+        <li><a href="#faq"><i class="fa-solid fa-circle-question"></i> Preguntas frecuentes</a></li>
+      </ol>
+    </div>
+
+    <!-- 1. INTRO -->
+    <section id="intro">
+      <h2><i class="fa-solid fa-music"></i> ¿Qué es LuMi?</h2>
+      <p><strong>LuMi</strong> es tu reproductor de música personal. Reúne en un solo lugar las canciones que descargas desde YouTube, con sus portadas, metadatos y la posibilidad de organizarlas en listas.</p>
+      <p>A diferencia de otros servicios, tu música se guarda en <strong>tu propio Google Drive</strong>, así que siempre es tuya. LuMi solo se encarga de organizarla y reproducirla.</p>
+
+      <div class="tip">
+        <i class="fa-solid fa-lightbulb"></i>
+        <div>
+          <strong>Sin publicidad, sin suscripciones</strong>. Solo tu música, tus reglas.
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. CUENTA -->
+    <section id="cuenta">
+      <h2><i class="fa-solid fa-user"></i> Crear cuenta e iniciar sesión</h2>
+
+      <p>Para usar LuMi necesitas una cuenta. Es rápida de crear y no requiere email.</p>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1rem 0 0.5rem;">Crear una cuenta nueva</h3>
+      <ol class="steps">
+        <li>Abre LuMi por primera vez.</li>
+        <li>Toca la pestaña <strong>"Crear cuenta"</strong>.</li>
+        <li>Elige un <strong>nombre de usuario</strong> (mínimo 3 caracteres, sin espacios).</li>
+        <li>Elige una <strong>contraseña</strong> (mínimo 4 caracteres).</li>
+        <li>Toca <strong>"Crear cuenta"</strong>.</li>
+      </ol>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1.5rem 0 0.5rem;">Iniciar sesión</h3>
+      <ol class="steps">
+        <li>Abre LuMi.</li>
+        <li>Escribe tu usuario y contraseña.</li>
+        <li>Toca <strong>"Entrar"</strong>.</li>
+      </ol>
+
+      <div class="tip warn">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div>
+          <strong>Olvidaste tu contraseña?</strong> Contacta al administrador para que te la resetee. No hay recuperación automática por email.
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. BIBLIOTECA -->
+    <section id="biblioteca">
+      <h2><i class="fa-solid fa-compact-disc"></i> Tu biblioteca</h2>
+
+      <p>La <strong>Biblioteca</strong> muestra todas las canciones disponibles en LuMi, agrupadas en dos secciones:</p>
+
+      <div class="platform-grid">
+        <div class="platform-card">
+          <h4><i class="fa-solid fa-chart-line"></i> Top Descargas</h4>
+          <p>Canciones populares de Billboard, iTunes y Spotify. Son <strong>compartidas</strong> entre todos los usuarios de LuMi.</p>
+        </div>
+        <div class="platform-card">
+          <h4><i class="fa-solid fa-user"></i> Mis descargas</h4>
+          <p>Las canciones que tú bajaste manualmente. Solo <strong>tú las ves</strong>, nadie más puede acceder a ellas.</p>
+        </div>
+      </div>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1.5rem 0 0.5rem;">Buscar y filtrar</h3>
+      <p>Usa la barra de búsqueda para encontrar una canción por nombre, o los filtros para mostrar solo ciertas fuentes o listas:</p>
+      <ul style="padding-left:1.5rem;color:#bbb;font-size:0.95rem;">
+        <li style="margin-bottom:0.4rem;"><strong>Fuente</strong>: "Mis descargas", "Billboard", "iTunes", etc.</li>
+        <li style="margin-bottom:0.4rem;"><strong>Lista</strong>: filtra por tus listas de reproducción.</li>
+      </ul>
+    </section>
+
+    <!-- 4. DESCARGAR -->
+    <section id="descargar">
+      <h2><i class="fa-solid fa-download"></i> Descargar música</h2>
+
+      <p>Puedes descargar cualquier canción disponible en YouTube. LuMi se encarga de todo: descarga, convierte a MP3, extrae portada y metadatos, y lo sube a tu Drive.</p>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1rem 0 0.5rem;">Descargar una canción individual</h3>
+      <ol class="steps">
+        <li>En el campo de descarga, escribe el <strong>nombre de la canción</strong> y el artista.</li>
+        <li>Toca <strong>"Descargar"</strong>.</li>
+        <li>Espera ~30-60 segundos mientras LuMi la procesa.</li>
+        <li>¡Listo! La canción aparece en <strong>"Mis descargas"</strong>.</li>
+      </ol>
+
+      <div class="tip">
+        <i class="fa-solid fa-lightbulb"></i>
+        <div>
+          <strong>Consejo:</strong> sé específico. En lugar de <em>"bad bunny"</em>, escribe <em>"bad bunny monaco"</em> para mejores resultados.
+        </div>
+      </div>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1.5rem 0 0.5rem;">Cancelar o reintentar</h3>
+      <p>Si una descarga falla, vuelve a intentarlo. LuMi te avisará si la canción ya existe o si hubo algún problema.</p>
+    </section>
+
+    <!-- 5. CHARTS -->
+    <section id="charts">
+      <h2><i class="fa-solid fa-chart-simple"></i> Charts musicales</h2>
+
+      <p>La pestaña <strong>Charts</strong> te permite ver y descargar listas de éxitos actualizadas de distintas fuentes:</p>
+
+      <div class="platform-grid">
+        <div class="platform-card">
+          <h4><i class="fa-solid fa-trophy"></i> Billboard Hot 100</h4>
+          <p>El ranking semanal más famoso de Estados Unidos. 100 canciones.</p>
+        </div>
+        <div class="platform-card">
+          <h4><i class="fa-brands fa-apple"></i> iTunes</h4>
+          <p>Top 100 de Apple Music por país: USA, México, España, Argentina, Colombia.</p>
+        </div>
+        <div class="platform-card">
+          <h4><i class="fa-brands fa-spotify"></i> Spotify</h4>
+          <p>Top 50 global de las canciones más escuchadas en Spotify.</p>
+        </div>
+      </div>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1.5rem 0 0.5rem;">Ver un chart</h3>
+      <ol class="steps">
+        <li>Selecciona la <strong>fuente</strong> en el desplegable.</li>
+        <li>Elige cuántas canciones ver (Top 5, 10, 25...).</li>
+        <li>Toca <strong>"Ver chart"</strong>.</li>
+      </ol>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1.5rem 0 0.5rem;">Descargar canciones del chart</h3>
+      <ul style="padding-left:1.5rem;color:#bbb;font-size:0.95rem;">
+        <li style="margin-bottom:0.4rem;"><strong>Individual</strong>: toca <strong>"Bajar"</strong> en cualquier canción.</li>
+        <li style="margin-bottom:0.4rem;"><strong>En lote</strong>: toca <strong>"Descargar chart"</strong> para bajar todas las del Top seleccionado.</li>
+      </ul>
+
+      <div class="tip info">
+        <i class="fa-solid fa-circle-info"></i>
+        <div>
+          Las canciones de los charts son <strong>gratis</strong> y no consumen tu cuota personal. Si ya existen en LuMi, se marcan con <strong>"✓ Ya la tienes"</strong>.
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. LISTAS -->
+    <section id="listas">
+      <h2><i class="fa-solid fa-list-check"></i> Listas de reproducción</h2>
+
+      <p>Organiza tu música en listas personalizadas. Cada usuario tiene sus propias listas, y son <strong>privadas</strong>.</p>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1rem 0 0.5rem;">Crear una lista nueva</h3>
+      <ol class="steps">
+        <li>Toca el ícono <strong>➕</strong> sobre cualquier canción.</li>
+        <li>En el campo "Crear lista nueva", escribe el nombre (ej: <em>"GYM"</em>, <em>"Para dormir"</em>).</li>
+        <li>Toca <strong>"Crear"</strong>. La canción se añade automáticamente.</li>
+      </ol>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1.5rem 0 0.5rem;">Añadir canciones a una lista existente</h3>
+      <ol class="steps">
+        <li>Toca el ícono <strong>➕</strong> sobre la canción.</li>
+        <li>Marca las listas a las que quieras añadirla.</li>
+        <li>Cierra el modal.</li>
+      </ol>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1.5rem 0 0.5rem;">Filtrar por lista</h3>
+      <p>Usa el desplegable <strong>"Todas las listas"</strong> en la parte superior para ver solo las canciones de una lista concreta.</p>
+
+      <div class="tip">
+        <i class="fa-solid fa-lightbulb"></i>
+        <div>
+          <strong>Una canción puede estar en varias listas a la vez.</strong> Por ejemplo, "Bad Bunny - Monaco" puede estar en "GYM" y "Favoritas" al mismo tiempo.
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. CUOTA -->
+    <section id="cuota">
+      <h2><i class="fa-solid fa-cloud-arrow-down"></i> Tu cuota de descargas</h2>
+
+      <p>Cada usuario tiene un límite de descargas manuales. Puedes verlo en la parte superior derecha, junto a tu nombre:</p>
+
+      <div style="background:#161616;border:1px solid #1f1f1f;border-radius:10px;padding:1.25rem;margin:1rem 0;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:800;color:#1db954;">137 / 150</div>
+        <div style="color:#888;font-size:0.85rem;margin-top:0.35rem;">Descargas restantes / Cuota total</div>
+      </div>
+
+      <h3 style="font-size:1rem;color:#eee;margin:1rem 0 0.5rem;">¿Qué consume cuota?</h3>
+      <ul style="padding-left:1.5rem;color:#bbb;font-size:0.95rem;">
+        <li style="margin-bottom:0.4rem;">✅ <strong>Descargas manuales</strong> (cuando buscas algo por tu cuenta).</li>
+        <li style="margin-bottom:0.4rem;">✅ <strong>Descargas desde charts</strong> que ya existan en Drive (reutilización).</li>
+        <li style="margin-bottom:0.4rem;">❌ <strong>NO consume</strong>: escuchar música.</li>
+        <li style="margin-bottom:0.4rem;">❌ <strong>NO consume</strong>: crear listas o filtrar.</li>
+      </ul>
+
+      <div class="tip warn">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div>
+          Si tu cuota se agota, no podrás descargar más canciones hasta que el administrador te la amplíe.
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. INSTALAR -->
+    <section id="instalar">
+      <h2><i class="fa-solid fa-mobile-screen"></i> Instalar LuMi como app</h2>
+
+      <p>Puedes instalar LuMi en tu celular o PC para que se abra como una app nativa, sin barra del navegador y con acceso directo desde tu pantalla de inicio.</p>
+
+      <div class="platform-grid">
+        <div class="platform-card">
+          <h4><i class="fa-brands fa-android"></i> Android</h4>
+          <p>Abre LuMi en Chrome → aparecerá un botón verde <strong>"Instalar App"</strong> → tócalo.</p>
+        </div>
+        <div class="platform-card">
+          <h4><i class="fa-brands fa-apple"></i> iPhone / iPad</h4>
+          <p><strong>Debes usar Safari</strong> → toca <strong>Compartir (⬆️)</strong> → <strong>"Añadir a pantalla de inicio"</strong>.</p>
+        </div>
+        <div class="platform-card">
+          <h4><i class="fa-brands fa-windows"></i> Windows / Mac</h4>
+          <p>En Chrome o Edge, busca el <strong>ícono de instalación</strong> en la barra de direcciones.</p>
+        </div>
+      </div>
+
+      <div class="tip info">
+        <i class="fa-solid fa-circle-info"></i>
+        <div>
+          <strong>En iPhone</strong>, Chrome y otros navegadores <strong>NO</strong> pueden instalar apps. Solo Safari puede.
+        </div>
+      </div>
+
+      <div class="tip">
+        <i class="fa-solid fa-lightbulb"></i>
+        <div>
+          Una vez instalada, LuMi puede seguir reproduciendo música <strong>con el celular bloqueado</strong> y muestra controles en la pantalla de bloqueo.
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. FAQ -->
+    <section id="faq">
+      <h2><i class="fa-solid fa-circle-question"></i> Preguntas frecuentes</h2>
+
+      <details>
+        <summary>¿Dónde se guardan mis canciones?</summary>
+        <div>En tu propia cuenta de Google Drive, en la carpeta <strong>"Mi Musica Reproductor"</strong>. LuMi solo organiza y reproduce; los archivos son tuyos.</div>
+      </details>
+
+      <details>
+        <summary>¿Por qué tarda tanto una descarga?</summary>
+        <div>LuMi descarga desde YouTube, convierte a MP3 de alta calidad, busca portada en iTunes, sube a Google Drive, y actualiza la base de datos. Todo esto toma ~30-60 segundos por canción. Las descargas desde charts pueden tardar varios minutos si son muchas.</div>
+      </details>
+
+      <details>
+        <summary>¿Puedo usar LuMi sin internet?</summary>
+        <div>No del todo. La app en sí funciona offline (gracias al Service Worker), pero para reproducir música necesitas internet porque el streaming viene desde tu Google Drive.</div>
+      </details>
+
+      <details>
+        <summary>¿Otros usuarios pueden ver mi música?</summary>
+        <div>No. Tus <strong>descargas personales</strong> son privadas. Solo las canciones de charts (Billboard, iTunes, Spotify) son compartidas con todos los usuarios.</div>
+      </details>
+
+      <details>
+        <summary>¿Puedo descargar música sin consumir cuota?</summary>
+        <div>Sí, todas las canciones de los <strong>charts son gratuitas</strong>. Solo las descargas manuales consumen tu cuota personal.</div>
+      </details>
+
+      <details>
+        <summary>¿Qué pasa si borro una canción?</summary>
+        <div>Se elimina de tu biblioteca. Si es una canción de chart que nadie más tiene, también se borra de Drive. Si es una descarga tuya personal, se borra el archivo y la portada de Drive.</div>
+      </details>
+
+      <details>
+        <summary>¿Cómo cambio mi contraseña?</summary>
+        <div>Contacta al administrador. Por seguridad, no hay opción de cambio de contraseña desde la app todavía.</div>
+      </details>
+
+      <details>
+        <summary>¿Funciona en varios dispositivos a la vez?</summary>
+        <div>Sí, puedes iniciar sesión en múltiples dispositivos con la misma cuenta. Tu biblioteca y listas estarán sincronizadas.</div>
+      </details>
+
+      <details>
+        <summary>¿Hay límite de canciones que puedo guardar?</summary>
+        <div>No hay límite en la cantidad de canciones guardadas. El límite es la <strong>cuota de descargas</strong> (por ejemplo 50 descargas nuevas). Una vez descargadas, puedes guardarlas para siempre.</div>
+      </details>
+
+      <details>
+        <summary>¿Puedo exportar mi música a otro reproductor?</summary>
+        <div>Sí, los MP3 están en tu Google Drive con portada y metadatos ID3 correctos. Puedes descargarlos desde Drive y usarlos en cualquier reproductor (VLC, MusicBee, iTunes, etc.).</div>
+      </details>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>Hecho con <i class="fa-solid fa-heart"></i> para tu música</p>
+    <p style="margin-top:0.5rem;">LuMi — Tu música, tus reglas</p>
+  </footer>
+
+</body>
+</html>

@@ -1094,3 +1094,24 @@ audio {
     font-size: 0.8rem;
   }
 }
+/* ═══ Botón de Ayuda ═══ */
+.help-btn {
+  background: #1a1a1a;
+  color: #888;
+  border: 1px solid #2a2a2a;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-btn:hover {
+  background: #252525;
+  color: #1ed760;
+  border-color: rgba(29, 185, 84, 0.4);
+}
