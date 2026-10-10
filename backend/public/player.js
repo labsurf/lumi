@@ -13,10 +13,71 @@ console.log(`🔗 Backend: ${API}`);
 // ─── Registrar Service Worker (PWA) ───────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-       navigator.serviceWorker.register('sw.js')
+    navigator.serviceWorker.register('sw.js')
       .then((reg) => console.log('✅ SW registrado:', reg.scope))
       .catch((err) => console.warn('⚠️ SW error:', err));
   });
+}
+
+// ═══════════════════════════════════════════════════════
+//  MANTENER SESIÓN DE AUDIO ACTIVA EN MÓVIL
+// ═══════════════════════════════════════════════════════
+// Usamos AudioContext con un oscilador silencioso en lugar de un
+// elemento <audio>. Ventaja: AudioContext NO aparece en la Media
+// Session del sistema operativo, por lo que NO interfiere con los
+// controles del widget (play/pause del sistema).
+let audioContext = null;
+let silentOscillator = null;
+
+function startSilentAudio() {
+  try {
+    // Si ya está corriendo, no hacer nada
+    if (audioContext && audioContext.state === 'running') return;
+
+    // Crear AudioContext (solo si no existe)
+    if (!audioContext) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        console.warn('AudioContext no soportado');
+        return;
+      }
+      audioContext = new AudioContextClass();
+    }
+
+    // Reactivar si está suspendido (política de autoplay de los navegadores)
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
+    // Oscilador silencioso (frecuencia muy baja, ganancia 0)
+    if (!silentOscillator) {
+      silentOscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0;             // Volumen 0 = completamente silencioso
+      silentOscillator.frequency.value = 40; // 40 Hz (inaudible)
+      silentOscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      silentOscillator.start();
+    }
+  } catch (err) {
+    console.warn('Error al iniciar AudioContext:', err.message);
+  }
+}
+
+function stopSilentAudio() {
+  try {
+    if (silentOscillator) {
+      silentOscillator.stop();
+      silentOscillator.disconnect();
+      silentOscillator = null;
+    }
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close();
+      audioContext = null;
+    }
+  } catch (err) {
+    console.warn('Error al detener AudioContext:', err.message);
+  }
 }
 
 // ─── Auth state ──────────────────────────────────────
@@ -420,16 +481,56 @@ function playTrack(index) {
   if (index < 0 || index >= filtered.length) return;
   currentIndex = index;
   const track = filtered[index];
+
+  startSilentAudio();
+
   audio.src = resolveUrl(track.streamUrl);
   audio.play().catch((err) => console.warn('Reproducción:', err.message));
+
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.name,
+      artist: 'LuMi',
+      album: 'Tu música, tus reglas',
+      artwork: [
+        { src: resolveUrl(track.coverUrl || 'icon-512.png'), sizes: '512x512', type: 'image/png' }
+      ]
+    });
+    navigator.mediaSession.playbackState = 'playing';
+
+    navigator.mediaSession.setActionHandler('play', () => {
+      audio.play();
+      navigator.mediaSession.playbackState = 'playing';
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      audio.pause();
+      navigator.mediaSession.playbackState = 'paused';
+    });
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      playTrack(currentIndex - 1);
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      playTrack(currentIndex + 1);
+    });
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+      audio.currentTime = Math.max(0, audio.currentTime - (details.seekOffset || 10));
+    });
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+      audio.currentTime = Math.min(audio.duration, audio.currentTime + (details.seekOffset || 10));
+    });
+  }
+
   nowPlaying.innerHTML = `${ICONS.play} <span>${track.name}</span>`;
   trackMeta.innerHTML = `${sourceLabel(track)} · ${new Date(track.createdAt).toLocaleDateString()}`;
   render();
 }
 
-audio.onended = () => playTrack(currentIndex + 1);
-prevBtn.onclick = () => playTrack(currentIndex - 1);
-nextBtn.onclick = () => playTrack(currentIndex + 1);
+audio.onended = () => {
+  if (currentIndex + 1 >= filtered.length) {
+    stopSilentAudio();
+  }
+  playTrack(currentIndex + 1);
+};
 
 // ═══════════════════════════════════════════════════════
 //  BÚSQUEDA Y FILTROS
@@ -1075,19 +1176,16 @@ function showInstallButton() {
     return;
   }
 
-  // iOS: mostrar botón siempre (incluso en Chrome, para avisar)
   if (platform === 'ios') {
     installBtn.classList.remove('hidden');
     installBtn.onclick = showIosInstructions;
     if (isChromeIOS) {
-      // Cambiar el texto del botón para indicar la limitación
       installBtn.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>Cómo instalar</span>';
     }
     console.log('[PWA] Mostrando botón para iOS');
     return;
   }
 
-  // Android/PC con evento capturado
   if (deferredPrompt) {
     installBtn.classList.remove('hidden');
     installBtn.onclick = async () => {
@@ -1110,6 +1208,83 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ═══════════════════════════════════════════════════════
+//  CONTROLES PERSONALIZADOS DE REPRODUCCIÓN
+// ═══════════════════════════════════════════════════════
+const playPauseBtn = document.getElementById('playPauseBtn');
+const seekBar = document.getElementById('seekBar');
+const currentTimeEl = document.getElementById('currentTime');
+const durationEl = document.getElementById('duration');
+
+// Formatear tiempo mm:ss
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// Play/Pause
+playPauseBtn.onclick = () => {
+  if (audio.paused) {
+    audio.play();
+  } else {
+    audio.pause();
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//  BOTONES ANTERIOR / SIGUIENTE  ← NUEVOS
+// ═══════════════════════════════════════════════════════
+prevBtn.onclick = () => {
+  if (currentIndex > 0) {
+    playTrack(currentIndex - 1);
+  } else {
+    // Si es la primera, reinicia
+    audio.currentTime = 0;
+  }
+};
+
+nextBtn.onclick = () => {
+  if (currentIndex + 1 < filtered.length) {
+    playTrack(currentIndex + 1);
+  }
+};
+
+// Actualizar el ícono del botón según el estado
+audio.addEventListener('play', () => {
+  playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+});
+audio.addEventListener('pause', () => {
+  playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+});
+
+// Actualizar barra de progreso
+audio.addEventListener('timeupdate', () => {
+  if (!audio.duration) return;
+  const progress = (audio.currentTime / audio.duration) * 100;
+  seekBar.value = progress;
+  currentTimeEl.textContent = formatTime(audio.currentTime);
+});
+
+// Actualizar duración al cargar
+audio.addEventListener('loadedmetadata', () => {
+  durationEl.textContent = formatTime(audio.duration);
+});
+
+// Seek al mover la barra
+seekBar.addEventListener('input', () => {
+  if (!audio.duration) return;
+  audio.currentTime = (seekBar.value / 100) * audio.duration;
+});
+
+// Al cambiar de canción, resetear la barra
+audio.addEventListener('emptied', () => {
+  seekBar.value = 0;
+  currentTimeEl.textContent = '0:00';
+  durationEl.textContent = '0:00';
+});
+
+// ═══════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════
 async function bootApp() {
@@ -1127,7 +1302,6 @@ async function bootApp() {
   await loadSources();
   loadChartBtn.click();
 
-  // PWA: mostrar botón de instalación tras un momento
   setTimeout(() => {
     if (!isStandalone()) showInstallButton();
   }, 1500);

@@ -667,7 +667,7 @@ button:disabled { background: #2a2a2a; color: #666; cursor: not-allowed; }
   right: 0;
   background: #050505;
   border-top: 1px solid #1f1f1f;
-  padding: 1rem 1.5rem;
+  padding: 1.25rem 1.5rem; /* Un poco más de espacio vertical */
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -696,11 +696,10 @@ button:disabled { background: #2a2a2a; color: #666; cursor: not-allowed; }
 
 audio {
   flex: 2;
-  min-width: 300px;
-  height: 40px;
+  min-width: 340px; /* Un poco más ancho */
+  height: 42px; /* Un pelín más alto */
   filter: invert(0.9) hue-rotate(180deg);
 }
-
 .controls { display: flex; gap: 0.4rem; }
 
 .controls button {
@@ -1114,4 +1113,89 @@ audio {
   background: #252525;
   color: #1ed760;
   border-color: rgba(29, 185, 84, 0.4);
+}
+/* ═══ Controles personalizados del reproductor ═══ */
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.controls button {
+  padding: 0.65rem 0.9rem;
+  font-size: 1rem;
+  min-width: 44px;
+}
+
+#playPauseBtn {
+  background: #1db954;
+  color: #000;
+  padding: 0.7rem 1rem;
+}
+
+#playPauseBtn:hover {
+  background: #1ed760;
+}
+
+/* ═══ Barra de progreso ═══ */
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 2;
+  min-width: 260px;
+}
+
+.progress-bar-container span {
+  font-size: 0.75rem;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: center;
+}
+
+#seekBar {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #222;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  padding: 0;
+  border: none;
+}
+
+#seekBar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1db954;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+#seekBar::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+#seekBar::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1db954;
+  cursor: pointer;
+  border: none;
+}
+
+/* En móvil, apilar la barra de progreso debajo */
+@media (max-width: 700px) {
+  .progress-bar-container {
+    order: 3;
+    flex-basis: 100%;
+    margin-top: 0.5rem;
+  }
 }
