@@ -22,55 +22,34 @@ if ('serviceWorker' in navigator) {
 // ═══════════════════════════════════════════════════════
 //  MANTENER SESIÓN DE AUDIO ACTIVA EN MÓVIL
 // ═══════════════════════════════════════════════════════
-let audioContext = null;
-let silentOscillator = null;
+// Usamos un elemento <audio> con un MP3 silencioso en loop.
+// Android (con su modo Doze) solo mantiene viva la PWA si
+// detecta un <audio> reproduciéndose.
+//
+// ⚠️ REQUISITO: Debe existir el archivo 'silence.mp3' en public/
+const silentAudio = new Audio('silence.mp3');
+silentAudio.loop = true;
+silentAudio.volume = 0.001;  // Casi inaudible (no 0, porque muted no cuenta como "playing")
+silentAudio.preload = 'auto';
+silentAudio.setAttribute('playsinline', '');
 
 function startSilentAudio() {
-  try {
-    if (audioContext && audioContext.state === 'running') return;
-
-    if (!audioContext) {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) {
-        console.warn('AudioContext no soportado');
-        return;
-      }
-      audioContext = new AudioContextClass();
-    }
-
-    if (audioContext.state === 'suspended') {
-      audioContext.resume();
-    }
-
-    if (!silentOscillator) {
-      silentOscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      gainNode.gain.value = 0;
-      silentOscillator.frequency.value = 40;
-      silentOscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      silentOscillator.start();
-    }
-  } catch (err) {
-    console.warn('Error al iniciar AudioContext:', err.message);
-  }
+  if (!silentAudio.paused) return;
+  silentAudio.play().catch(err => {
+    console.warn('Audio silencioso (se reintentará al tocar):', err.message);
+  });
 }
 
 function stopSilentAudio() {
-  try {
-    if (silentOscillator) {
-      silentOscillator.stop();
-      silentOscillator.disconnect();
-      silentOscillator = null;
-    }
-    if (audioContext && audioContext.state !== 'closed') {
-      audioContext.close();
-      audioContext = null;
-    }
-  } catch (err) {
-    console.warn('Error al detener AudioContext:', err.message);
-  }
+  silentAudio.pause();
 }
+
+// Reintentar si el navegador bloqueó la reproducción inicial
+document.addEventListener('click', () => {
+  if (silentAudio.paused) {
+    startSilentAudio();
+  }
+}, { capture: true });
 
 // ─── Auth state ──────────────────────────────────────
 const TOKEN_KEY = 'lumi_token';
@@ -108,8 +87,6 @@ function resolveUrl(url) {
 //  DOM
 // ═══════════════════════════════════════════════════════
 const audio = document.getElementById('audio');
-
-// ─── Elemento de precarga para la siguiente canción ───
 const audioNext = new Audio();
 audioNext.preload = 'auto';
 audioNext.muted = true;
@@ -172,6 +149,7 @@ const currentTimeEl = document.getElementById('currentTime');
 const durationEl = document.getElementById('duration');
 
 let authMode = 'login';
+let mediaSessionReady = false;
 
 // ═══════════════════════════════════════════════════════
 //  AUTH
@@ -266,7 +244,6 @@ let libraryNames = new Set();
 let playlists = [];
 let modalTrackId = null;
 let pollTimer = null;
-let mediaSessionReady = false;
 
 // ═══════════════════════════════════════════════════════
 //  ETIQUETAS E ICONOS
@@ -303,7 +280,7 @@ const ICONS = {
 };
 
 // ═══════════════════════════════════════════════════════
-//  MEDIA SESSION (registrada UNA SOLA VEZ)
+//  MEDIA SESSION (una sola vez)
 // ═══════════════════════════════════════════════════════
 function setupMediaSession() {
   if (mediaSessionReady) return;
@@ -335,7 +312,7 @@ function setupMediaSession() {
       if (currentIndex + 1 < filtered.length) playTrack(currentIndex + 1);
     });
 
-    // Desactivar seek para que iOS muestre ⏮ ⏭ en lugar de ±10s
+    // Desactivar seek para que iOS muestre ⏮ ⏭
     try {
       navigator.mediaSession.setActionHandler('seekbackward', null);
       navigator.mediaSession.setActionHandler('seekforward', null);
@@ -454,7 +431,7 @@ function createCard(t, globalIndex) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  RENDER CON SECCIONES AGRUPADAS
+//  RENDER CON SECCIONES
 // ═══════════════════════════════════════════════════════
 function render() {
   playlistEl.innerHTML = '';
@@ -538,10 +515,8 @@ function playTrack(index) {
   audio.src = resolveUrl(track.streamUrl);
   audio.play().catch((err) => console.warn('Reproducción:', err.message));
 
-  // Configurar handlers (solo la primera vez)
   setupMediaSession();
 
-  // Actualizar metadata
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.name,
@@ -558,7 +533,6 @@ function playTrack(index) {
   trackMeta.innerHTML = `${sourceLabel(track)} · ${new Date(track.createdAt).toLocaleDateString()}`;
   render();
 
-  // Precargar la siguiente canción (evita cortes en Android)
   precargarSiguiente();
 }
 
@@ -644,7 +618,6 @@ audio.addEventListener('pause', () => {
 audio.addEventListener('loadedmetadata', () => {
   durationEl.textContent = formatTime(audio.duration);
 
-  // Actualizar posición en el widget del sistema (iOS lo necesita)
   if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
     try {
       navigator.mediaSession.setPositionState({
@@ -662,7 +635,6 @@ audio.addEventListener('timeupdate', () => {
   seekBar.value = progress;
   currentTimeEl.textContent = formatTime(audio.currentTime);
 
-  // Actualizar posición en el widget del sistema
   if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
     try {
       navigator.mediaSession.setPositionState({
@@ -685,7 +657,6 @@ audio.addEventListener('emptied', () => {
   durationEl.textContent = '0:00';
 });
 
-// Refrescar la sesión al volver a la pestaña
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && 'mediaSession' in navigator && navigator.mediaSession.metadata) {
     navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
@@ -1380,15 +1351,16 @@ async function bootApp() {
 
 (async () => {
   const token = getToken();
-  if (!token) {
-    showAuthScreen();
-    return;
+  if (token) {
+    try {
+      const res = await apiFetch('/auth/me');
+      currentUser = await res.json();
+      await bootApp();
+      return;
+    } catch {
+      showAuthScreen();
+      return;
+    }
   }
-  try {
-    const res = await apiFetch('/auth/me');
-    currentUser = await res.json();
-    await bootApp();
-  } catch {
-    showAuthScreen();
-  }
+  showAuthScreen();
 })();
