@@ -22,19 +22,13 @@ if ('serviceWorker' in navigator) {
 // ═══════════════════════════════════════════════════════
 //  MANTENER SESIÓN DE AUDIO ACTIVA EN MÓVIL
 // ═══════════════════════════════════════════════════════
-// Usamos AudioContext con un oscilador silencioso en lugar de un
-// elemento <audio>. Ventaja: AudioContext NO aparece en la Media
-// Session del sistema operativo, por lo que NO interfiere con los
-// controles del widget (play/pause del sistema).
 let audioContext = null;
 let silentOscillator = null;
 
 function startSilentAudio() {
   try {
-    // Si ya está corriendo, no hacer nada
     if (audioContext && audioContext.state === 'running') return;
 
-    // Crear AudioContext (solo si no existe)
     if (!audioContext) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) {
@@ -44,17 +38,15 @@ function startSilentAudio() {
       audioContext = new AudioContextClass();
     }
 
-    // Reactivar si está suspendido (política de autoplay de los navegadores)
     if (audioContext.state === 'suspended') {
       audioContext.resume();
     }
 
-    // Oscilador silencioso (frecuencia muy baja, ganancia 0)
     if (!silentOscillator) {
       silentOscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      gainNode.gain.value = 0;             // Volumen 0 = completamente silencioso
-      silentOscillator.frequency.value = 40; // 40 Hz (inaudible)
+      gainNode.gain.value = 0;
+      silentOscillator.frequency.value = 40;
       silentOscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
       silentOscillator.start();
@@ -116,6 +108,12 @@ function resolveUrl(url) {
 //  DOM
 // ═══════════════════════════════════════════════════════
 const audio = document.getElementById('audio');
+
+// ─── Elemento de precarga para la siguiente canción ───
+const audioNext = new Audio();
+audioNext.preload = 'auto';
+audioNext.muted = true;
+
 const playlistEl = document.getElementById('playlist');
 const nowPlaying = document.getElementById('nowPlaying');
 const trackMeta = document.getElementById('trackMeta');
@@ -166,6 +164,12 @@ const userModalCancel = document.getElementById('userModalCancel');
 
 // PWA
 const installBtn = document.getElementById('installBtn');
+
+// Controles del reproductor
+const playPauseBtn = document.getElementById('playPauseBtn');
+const seekBar = document.getElementById('seekBar');
+const currentTimeEl = document.getElementById('currentTime');
+const durationEl = document.getElementById('duration');
 
 let authMode = 'login';
 
@@ -262,6 +266,7 @@ let libraryNames = new Set();
 let playlists = [];
 let modalTrackId = null;
 let pollTimer = null;
+let mediaSessionReady = false;
 
 // ═══════════════════════════════════════════════════════
 //  ETIQUETAS E ICONOS
@@ -296,6 +301,52 @@ const ICONS = {
   clock: '<i class="fa-regular fa-clock"></i>',
   flag: '<i class="fa-solid fa-flag-checkered"></i>',
 };
+
+// ═══════════════════════════════════════════════════════
+//  MEDIA SESSION (registrada UNA SOLA VEZ)
+// ═══════════════════════════════════════════════════════
+function setupMediaSession() {
+  if (mediaSessionReady) return;
+  if (!('mediaSession' in navigator)) return;
+
+  try {
+    navigator.mediaSession.setActionHandler('play', () => {
+      console.log('▶️ MS: play');
+      audio.play().catch(err => console.warn('MS play:', err.message));
+      navigator.mediaSession.playbackState = 'playing';
+      if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+    });
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+      console.log('⏸️ MS: pause');
+      audio.pause();
+      navigator.mediaSession.playbackState = 'paused';
+      if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+    });
+
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      console.log('⏮ MS: anterior');
+      if (currentIndex > 0) playTrack(currentIndex - 1);
+      else audio.currentTime = 0;
+    });
+
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      console.log('⏭ MS: siguiente');
+      if (currentIndex + 1 < filtered.length) playTrack(currentIndex + 1);
+    });
+
+    // Desactivar seek para que iOS muestre ⏮ ⏭ en lugar de ±10s
+    try {
+      navigator.mediaSession.setActionHandler('seekbackward', null);
+      navigator.mediaSession.setActionHandler('seekforward', null);
+    } catch (e) {}
+
+    mediaSessionReady = true;
+    console.log('✅ Media Session handlers registrados');
+  } catch (err) {
+    console.warn('⚠️ Media Session error:', err.message);
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 //  TABS
@@ -487,6 +538,10 @@ function playTrack(index) {
   audio.src = resolveUrl(track.streamUrl);
   audio.play().catch((err) => console.warn('Reproducción:', err.message));
 
+  // Configurar handlers (solo la primera vez)
+  setupMediaSession();
+
+  // Actualizar metadata
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.name,
@@ -497,32 +552,28 @@ function playTrack(index) {
       ]
     });
     navigator.mediaSession.playbackState = 'playing';
-
-    navigator.mediaSession.setActionHandler('play', () => {
-      audio.play();
-      navigator.mediaSession.playbackState = 'playing';
-    });
-    navigator.mediaSession.setActionHandler('pause', () => {
-      audio.pause();
-      navigator.mediaSession.playbackState = 'paused';
-    });
-    navigator.mediaSession.setActionHandler('previoustrack', () => {
-      playTrack(currentIndex - 1);
-    });
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
-      playTrack(currentIndex + 1);
-    });
-    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-      audio.currentTime = Math.max(0, audio.currentTime - (details.seekOffset || 10));
-    });
-    navigator.mediaSession.setActionHandler('seekforward', (details) => {
-      audio.currentTime = Math.min(audio.duration, audio.currentTime + (details.seekOffset || 10));
-    });
   }
 
   nowPlaying.innerHTML = `${ICONS.play} <span>${track.name}</span>`;
   trackMeta.innerHTML = `${sourceLabel(track)} · ${new Date(track.createdAt).toLocaleDateString()}`;
   render();
+
+  // Precargar la siguiente canción (evita cortes en Android)
+  precargarSiguiente();
+}
+
+function precargarSiguiente() {
+  try {
+    if (currentIndex + 1 < filtered.length) {
+      const next = filtered[currentIndex + 1];
+      audioNext.src = resolveUrl(next.streamUrl);
+      audioNext.load();
+    } else {
+      audioNext.src = '';
+    }
+  } catch (err) {
+    console.warn('Error precargando siguiente:', err.message);
+  }
 }
 
 audio.onended = () => {
@@ -543,6 +594,103 @@ searchInput.oninput = () => {
 
 sourceFilterSel.onchange = () => loadTracks();
 playlistFilterSel.onchange = () => loadTracks();
+
+// ═══════════════════════════════════════════════════════
+//  CONTROLES DEL REPRODUCTOR
+// ═══════════════════════════════════════════════════════
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+playPauseBtn.onclick = () => {
+  if (audio.paused) {
+    audio.play();
+  } else {
+    audio.pause();
+  }
+};
+
+prevBtn.onclick = () => {
+  if (currentIndex > 0) {
+    playTrack(currentIndex - 1);
+  } else {
+    audio.currentTime = 0;
+  }
+};
+
+nextBtn.onclick = () => {
+  if (currentIndex + 1 < filtered.length) {
+    playTrack(currentIndex + 1);
+  }
+};
+
+audio.addEventListener('play', () => {
+  playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.playbackState = 'playing';
+  }
+});
+
+audio.addEventListener('pause', () => {
+  playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.playbackState = 'paused';
+  }
+});
+
+audio.addEventListener('loadedmetadata', () => {
+  durationEl.textContent = formatTime(audio.duration);
+
+  // Actualizar posición en el widget del sistema (iOS lo necesita)
+  if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: audio.duration,
+        playbackRate: audio.playbackRate || 1,
+        position: audio.currentTime || 0
+      });
+    } catch (err) {}
+  }
+});
+
+audio.addEventListener('timeupdate', () => {
+  if (!audio.duration) return;
+  const progress = (audio.currentTime / audio.duration) * 100;
+  seekBar.value = progress;
+  currentTimeEl.textContent = formatTime(audio.currentTime);
+
+  // Actualizar posición en el widget del sistema
+  if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: audio.duration,
+        playbackRate: audio.playbackRate || 1,
+        position: audio.currentTime
+      });
+    } catch (err) {}
+  }
+});
+
+seekBar.addEventListener('input', () => {
+  if (!audio.duration) return;
+  audio.currentTime = (seekBar.value / 100) * audio.duration;
+});
+
+audio.addEventListener('emptied', () => {
+  seekBar.value = 0;
+  currentTimeEl.textContent = '0:00';
+  durationEl.textContent = '0:00';
+});
+
+// Refrescar la sesión al volver a la pestaña
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && 'mediaSession' in navigator && navigator.mediaSession.metadata) {
+    navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+  }
+});
 
 // ═══════════════════════════════════════════════════════
 //  DESCARGAR 1 CANCIÓN
@@ -867,7 +1015,7 @@ function pollDownloadProgress(expectedCount) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  ADMIN: Gestión de usuarios
+//  ADMIN
 // ═══════════════════════════════════════════════════════
 let allUsers = [];
 
@@ -1119,7 +1267,7 @@ userModal.onclick = (e) => {
 };
 
 // ═══════════════════════════════════════════════════════
-//  PWA: Instalación multiplataforma
+//  PWA
 // ═══════════════════════════════════════════════════════
 let deferredPrompt = null;
 
@@ -1205,83 +1353,6 @@ window.addEventListener('appinstalled', () => {
   console.log('[PWA] ¡App instalada!');
   installBtn.classList.add('hidden');
   deferredPrompt = null;
-});
-
-// ═══════════════════════════════════════════════════════
-//  CONTROLES PERSONALIZADOS DE REPRODUCCIÓN
-// ═══════════════════════════════════════════════════════
-const playPauseBtn = document.getElementById('playPauseBtn');
-const seekBar = document.getElementById('seekBar');
-const currentTimeEl = document.getElementById('currentTime');
-const durationEl = document.getElementById('duration');
-
-// Formatear tiempo mm:ss
-function formatTime(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-// Play/Pause
-playPauseBtn.onclick = () => {
-  if (audio.paused) {
-    audio.play();
-  } else {
-    audio.pause();
-  }
-};
-
-// ═══════════════════════════════════════════════════════
-//  BOTONES ANTERIOR / SIGUIENTE  ← NUEVOS
-// ═══════════════════════════════════════════════════════
-prevBtn.onclick = () => {
-  if (currentIndex > 0) {
-    playTrack(currentIndex - 1);
-  } else {
-    // Si es la primera, reinicia
-    audio.currentTime = 0;
-  }
-};
-
-nextBtn.onclick = () => {
-  if (currentIndex + 1 < filtered.length) {
-    playTrack(currentIndex + 1);
-  }
-};
-
-// Actualizar el ícono del botón según el estado
-audio.addEventListener('play', () => {
-  playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
-});
-audio.addEventListener('pause', () => {
-  playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
-});
-
-// Actualizar barra de progreso
-audio.addEventListener('timeupdate', () => {
-  if (!audio.duration) return;
-  const progress = (audio.currentTime / audio.duration) * 100;
-  seekBar.value = progress;
-  currentTimeEl.textContent = formatTime(audio.currentTime);
-});
-
-// Actualizar duración al cargar
-audio.addEventListener('loadedmetadata', () => {
-  durationEl.textContent = formatTime(audio.duration);
-});
-
-// Seek al mover la barra
-seekBar.addEventListener('input', () => {
-  if (!audio.duration) return;
-  audio.currentTime = (seekBar.value / 100) * audio.duration;
-});
-
-// Al cambiar de canción, resetear la barra
-audio.addEventListener('emptied', () => {
-  seekBar.value = 0;
-  currentTimeEl.textContent = '0:00';
-  durationEl.textContent = '0:00';
 });
 
 // ═══════════════════════════════════════════════════════

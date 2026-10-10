@@ -10,9 +10,6 @@ import { initUsers, promoteAdminsFromEnv } from './services/users.js';
 import { initPlaylists } from './services/playlists.js';
 import { initAccessLog } from './services/accessLog.js';
 import { initUserSongs } from './services/userSongs.js';
-import * as us from './services/userSongs.js';
-import { drive } from './services/auth.js';
-
 import authRouter from './routes/auth.js';
 import tracksRouter from './routes/tracks.js';
 import streamRouter from './routes/stream.js';
@@ -72,48 +69,6 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, timestamp: Date.now() });
 });
 
-// ─── Migración: asociar sueltas viejas al usuario más antiguo ──
-async function migrateOldSueltas() {
-  try {
-    const { getCached } = await import('./services/driveData.js');
-    const users = getCached('users.json').users;
-    if (users.length === 0) {
-      console.log('📦 Sin usuarios, no hay migración');
-      return;
-    }
-
-    const oldest = [...users].sort(
-      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-    )[0];
-
-    const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
-    const list = await drive.files.list({
-      q: `'${FOLDER_ID}' in parents and trashed=false and mimeType='audio/mpeg'`,
-      fields: 'files(id, name, properties)',
-      pageSize: 1000,
-    });
-
-    const currentIds = new Set(us.getUserFileIds(oldest.id));
-    let migrated = 0;
-
-    for (const f of list.data.files) {
-      const source = f.properties?.source || 'manual';
-      if (source !== 'manual') continue;
-      if (currentIds.has(f.id)) continue;
-
-      const normKey = f.properties?.normKey || '';
-      await us.addUserSong(oldest.id, f.id, normKey);
-      migrated++;
-    }
-
-    if (migrated > 0) {
-      console.log(`🔗 Migradas ${migrated} sueltas viejas a "${oldest.username}"`);
-    }
-  } catch (err) {
-    console.warn('Migración falló:', err.message);
-  }
-}
-
 // ─── Arranque ─────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 
@@ -125,7 +80,6 @@ const PORT = process.env.PORT || 3000;
     await initPlaylists();
     await initAccessLog();
     await initUserSongs();
-    await migrateOldSueltas();
     console.log('');
 
     app.listen(PORT, () => {
