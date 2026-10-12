@@ -20,21 +20,22 @@ if ('serviceWorker' in navigator) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  MANTENER SESIÓN DE AUDIO ACTIVA EN MÓVIL
+//  SILENT AUDIO — SOLO Android
 // ═══════════════════════════════════════════════════════
-// Usamos un elemento <audio> con un MP3 silencioso en loop.
-// Android (con su modo Doze) solo mantiene viva la PWA si
-// detecta un <audio> reproduciéndose.
-//
-// ⚠️ REQUISITO: Debe existir el archivo 'silence.mp3' en public/
+//  iOS NO necesita esto (su Media Session mantiene el audio activo).
+//  Si lo usamos en iOS, al reanudar desde el widget iOS crashea
+//  el WebProcess por "autoplay sin gesto del usuario".
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
 const silentAudio = new Audio('silence.mp3');
 silentAudio.loop = true;
-silentAudio.volume = 0.001;  // Casi inaudible (no 0, porque muted no cuenta como "playing")
+silentAudio.volume = 0.001;
 silentAudio.preload = 'auto';
 silentAudio.setAttribute('playsinline', '');
 silentAudio.disableRemotePlayback = true;
 
 function startSilentAudio() {
+  if (isIOS) return;   // ← iOS NO usa silentAudio
   if (!silentAudio.paused) return;
   silentAudio.play().catch(err => {
     console.warn('Audio silencioso (se reintentará al tocar):', err.message);
@@ -42,16 +43,18 @@ function startSilentAudio() {
 }
 
 function stopSilentAudio() {
+  if (isIOS) return;   // ← iOS NO usa silentAudio
   silentAudio.pause();
 }
 
-// Reintentar si el navegador bloqueó la reproducción inicial
-document.addEventListener('click', () => {
-  if (silentAudio.paused) {
-    startSilentAudio();
-  }
-}, { capture: true });
-
+// Reintentar en Android si el navegador bloqueó la reproducción inicial
+if (!isIOS) {
+  document.addEventListener('click', () => {
+    if (silentAudio.paused) {
+      startSilentAudio();
+    }
+  }, { capture: true });
+}
 // ─── Auth state ──────────────────────────────────────
 const TOKEN_KEY = 'lumi_token';
 let currentUser = null;
@@ -291,15 +294,16 @@ function setupMediaSession() {
       navigator.mediaSession.setActionHandler('play', () => {
       console.log('▶️ MS: play');
       audio.play().catch(err => console.warn('MS play:', err.message));
-      startSilentAudio();   // ← NUEVA LÍNEA: reactivar el silencio
+      // NO llamar startSilentAudio() aquí — causa crash en iOS
+      // El silentAudio se autorreactiva por su propio loop si estaba activo
       navigator.mediaSession.playbackState = 'playing';
       if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
     });
 
-       navigator.mediaSession.setActionHandler('pause', () => {
+      navigator.mediaSession.setActionHandler('pause', () => {
       console.log('⏸️ MS: pause');
       audio.pause();
-      silentAudio.pause();   // ← NUEVA LÍNEA: pausar el silencio también
+      if (!isIOS) silentAudio.pause();   // ← Solo Android
       navigator.mediaSession.playbackState = 'paused';
       if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
     });
@@ -585,10 +589,10 @@ function formatTime(seconds) {
 playPauseBtn.onclick = () => {
   if (audio.paused) {
     audio.play();
-    startSilentAudio();   // ← NUEVA LÍNEA
+    if (!isIOS) startSilentAudio();   // ← Solo Android
   } else {
     audio.pause();
-    silentAudio.pause();  // ← NUEVA LÍNEA
+    if (!isIOS) silentAudio.pause();  // ← Solo Android
   }
 };
 
