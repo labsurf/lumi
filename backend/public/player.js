@@ -32,6 +32,7 @@ silentAudio.loop = true;
 silentAudio.volume = 0.001;  // Casi inaudible (no 0, porque muted no cuenta como "playing")
 silentAudio.preload = 'auto';
 silentAudio.setAttribute('playsinline', '');
+silentAudio.disableRemotePlayback = true;
 
 function startSilentAudio() {
   if (!silentAudio.paused) return;
