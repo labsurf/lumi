@@ -64,13 +64,14 @@ function cleanYouTubeTitle(title) {
     /\s*[\(\[]\s*(HD|HQ|4K|8K|1080p|720p|Full\s*HD)\s*[\)\]]/gi,
     /\s*[\(\[]\s*(remaster(ed)?|remasterizad[oa])\s*[\)\]]/gi,
     /\s*[\(\[]\s*prod\.?\s*[^\)\]]*[\)\]]/gi,
-    // ─── (Spanish Version), (Version en Español), etc. ──
-    /\s*[\(\[]\s*(spanish|espa[nñ]ol|english|original|live|acoustic|remix|cover|instrumental|karaoke)\s*version\s*[\)\]]/gi,
-    // ─── Limpiar guiones huérfanos al final ──────────────
-    /\s*[-–—]\s*[\)\]]/g,
+    // ─── Cualquier paréntesis con basura (versión, oficial, video, etc.) ──
+    /\s*\([^)]*(oficial|official|video|audio|version|versión|lyric|letra|remaster|hd|hq|4k|en vivo|en directo)[^)]*\)/gi,
+    /\s*\[[^\]]*(oficial|official|video|audio|version|versión|lyric|letra|remaster|hd|hq|4k|en vivo|en directo)[^\]]*\]/gi,
     // ─── Limpiar paréntesis vacíos ───────────────────────
     /\(\s*\)/g,
     /\[\s*\]/g,
+    // ─── Limpiar guiones huérfanos al final ──────────────
+    /\s*[-–—]\s*[\)\]]/g,
     /\s+@[\w\.\-]+/g,
     /\s+#[\wáéíóúñ\-]+/gi,
     /[�◆▪▫■□●○▲△▼▽♫♬♪]+/g,
@@ -147,11 +148,11 @@ function resolveFinalName(yt, userInput) {
       if (isGeneric) { artist = ''; title = cleaned; }
       else { artist = channel; title = cleaned; }
     }
-    origin = 'youtube-parse';
+       origin = 'youtube-parse';
     if (!looksClean(artist) || !looksClean(title)) {
+      console.log(`   ⚠️  Parseo descartado: artist="${artist}" (${looksClean(artist) ? 'OK' : 'FALLÓ'}), title="${title}" (${looksClean(title) ? 'OK' : 'FALLÓ'})`);
       if (userInput) { artist = ''; title = userInput; origin = 'user-input-fallback'; }
     }
-  }
   if (!title) { title = userInput || 'Sin título'; origin = origin || 'fallback'; }
   const combined = artist ? `${artist} - ${title}` : title;
   return { artist, title, displayName: sanitizeDisplayName(combined), origin };
