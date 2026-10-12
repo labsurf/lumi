@@ -288,16 +288,18 @@ function setupMediaSession() {
   if (!('mediaSession' in navigator)) return;
 
   try {
-    navigator.mediaSession.setActionHandler('play', () => {
+      navigator.mediaSession.setActionHandler('play', () => {
       console.log('▶️ MS: play');
       audio.play().catch(err => console.warn('MS play:', err.message));
+      startSilentAudio();   // ← NUEVA LÍNEA: reactivar el silencio
       navigator.mediaSession.playbackState = 'playing';
       if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
     });
 
-    navigator.mediaSession.setActionHandler('pause', () => {
+       navigator.mediaSession.setActionHandler('pause', () => {
       console.log('⏸️ MS: pause');
       audio.pause();
+      silentAudio.pause();   // ← NUEVA LÍNEA: pausar el silencio también
       navigator.mediaSession.playbackState = 'paused';
       if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
     });
@@ -583,8 +585,10 @@ function formatTime(seconds) {
 playPauseBtn.onclick = () => {
   if (audio.paused) {
     audio.play();
+    startSilentAudio();   // ← NUEVA LÍNEA
   } else {
     audio.pause();
+    silentAudio.pause();  // ← NUEVA LÍNEA
   }
 };
 
