@@ -19,12 +19,9 @@ const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 await fsp.mkdir(TMP_DIR, { recursive: true }).catch(() => {});
 
 if (!fs.existsSync(COOKIES_FILE)) {
-  console.warn(`⚠️  No se encontró ${COOKIES_FILE}`);
+  console.warn('Warning: No se encontro ' + COOKIES_FILE);
 }
 
-// ═══════════════════════════════════════════════════════
-//  ARGS COMPARTIDOS PARA YT-DLP
-// ═══════════════════════════════════════════════════════
 const YTDLP_COMMON_ARGS = [
   '--extractor-args', 'youtube:player_client=tv,mweb,web_safari',
   '--js-runtimes', 'deno',
@@ -33,14 +30,10 @@ const YTDLP_COMMON_ARGS = [
   '--prefer-free-formats',
 ];
 
-// ═══════════════════════════════════════════════════════
-//  UTILIDADES
-// ═══════════════════════════════════════════════════════
-
 function sanitizeDisplayName(name) {
   return name
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
-    .replace(/[»«–—]/g, '-')
+    .replace(/[\u00BB\u00AB\u2013\u2014]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120);
@@ -48,54 +41,77 @@ function sanitizeDisplayName(name) {
 
 function cleanYouTubeTitle(title) {
   let t = title || '';
+
   const patterns = [
+    // Español: (Videoclip Oficial), (Video Oficial)
     /\s*[\(\[]\s*(videoclip|video\s*-?\s*clip|clip)\s*(oficial)?\s*[\)\]]/gi,
     /\s*[\(\[]\s*v[ií]deo\s*oficial\s*[\)\]]/gi,
     /\s*[\(\[]\s*oficial\s*[\)\]]/gi,
     /\s*[\(\[]\s*v[ií]deo\s*lyric\s*[\)\]]/gi,
     /\s*[\(\[]\s*lyric\s*video\s*(oficial)?\s*[\)\]]/gi,
+
+    // Inglés: (Official Video), (Official Audio), etc.
     /\s*[\(\[]\s*(official\s*)?(music\s*)?(video|audio|visualizer|clip)\s*[\)\]]/gi,
     /\s*[\(\[]\s*official\s*[\)\]]/gi,
+
+    // Letra / Lyrics
     /\s*[\(\[]\s*(letra|lyrics?|lyric\s*video)\s*[\)\]]/gi,
     /\s*[\(\[]\s*lyric[s]?\s*[\)\]]/gi,
     /\s*[\(\[]\s*letra\s*\/\s*lyrics?\s*[\)\]]/gi,
     /\s*[\(\[]\s*letra\s*[\)\]]/gi,
+
+    // Audio
     /\s*[\(\[]\s*audio\s*(oficial)?\s*[\)\]]/gi,
+
+    // Calidad
     /\s*[\(\[]\s*(HD|HQ|4K|8K|1080p|720p|Full\s*HD)\s*[\)\]]/gi,
+
+    // Remaster
     /\s*[\(\[]\s*(remaster(ed)?|remasterizad[oa])\s*[\)\]]/gi,
+
+    // Productor
     /\s*[\(\[]\s*prod\.?\s*[^\)\]]*[\)\]]/gi,
-    // ─── Cualquier paréntesis con basura (versión, oficial, video, etc.) ──
-    /\s*\([^)]*(oficial|official|video|audio|version|versión|lyric|letra|remaster|hd|hq|4k|en vivo|en directo)[^)]*\)/gi,
-    /\s*\[[^\]]*(oficial|official|video|audio|version|versión|lyric|letra|remaster|hd|hq|4k|en vivo|en directo)[^\]]*\]/gi,
-    // ─── Limpiar paréntesis vacíos ───────────────────────
+
+    // Cualquier paréntesis con basura (versión, oficial, video, etc.)
+    /\s*\([^)]*(oficial|official|video|audio|version|versi\u00F3n|lyric|letra|remaster|hd|hq|4k|en vivo|en directo)[^)]*\)/gi,
+    /\s*\[[^\]]*(oficial|official|video|audio|version|versi\u00F3n|lyric|letra|remaster|hd|hq|4k|en vivo|en directo)[^\]]*\]/gi,
+
+    // Paréntesis vacíos
     /\(\s*\)/g,
     /\[\s*\]/g,
-    // ─── Limpiar guiones huérfanos al final ──────────────
-    /\s*[-–—]\s*[\)\]]/g,
-    /\s+@[\w\.\-]+/g,
-    /\s+#[\wáéíóúñ\-]+/gi,
-    /[�◆▪▫■□●○▲△▼▽♫♬♪]+/g,
+
+    // Guiones huérfanos al final
+    /\s*[-\u2013\u2014]\s*[\)\]]/g,
+
+    // Handles y hashtags
+    /\s+@[\w.\-]+/g,
+    /\s+#[\w\u00E1\u00E9\u00ED\u00F3\u00FA\u00F1\-]+/gi,
+
+    // Caracteres rotos (solo BMP + common)
+    /[\uFFFD\u25C6\u25AA\u25AB\u25A0\u25A1\u25CF\u25CB\u25B2\u25B3\u25BC\u25BD\u266B\u266C\u266A]+/g,
+
+    // Cortar todo después de //
     /\/\/.*$/g,
   ];
+
   for (const p of patterns) t = t.replace(p, '');
+
   t = t.replace(/\s*-\s*Topic\s*$/i, '');
   return t.replace(/\s+/g, ' ').trim();
 }
 
 function looksClean(s) {
   if (!s) return false;
-  if (s.length > 80) return false;   // más permisivo
+  if (s.length > 80) return false;
 
-  // Contar solo "palabras reales" (ignorar guiones, símbolos solos)
   const realWords = s
     .split(/\s+/)
-    .filter((w) => /[a-z0-9áéíóúñ]/i.test(w));  // debe tener al menos 1 letra/número
-  if (realWords.length > 12) return false;      // hasta 12 palabras reales
+    .filter((w) => /[a-z0-9\u00E1\u00E9\u00ED\u00F3\u00FA\u00F1]/i.test(w));
+  if (realWords.length > 12) return false;
 
   if (/[\/\\|\[\]{}<>+~]/.test(s)) return false;
 
-  // Palabras basura — pero ya no incluir "spanish" ni "version"
-  if (/\b(sub|subtitled|traducci[oó]n|traducido|espa[nñ]ol|english|lyric|letra|official|oficial|video|audio|remaster|hd|hq|4k)\b/i.test(s)) {
+  if (/\b(sub|subtitled|traducci\u00F3n|traducido|espa\u00F1ol|english|lyric|letra|official|oficial|video|audio|remaster|hd|hq|4k)\b/i.test(s)) {
     return false;
   }
   return true;
@@ -119,13 +135,17 @@ function resolveFinalName(yt, userInput) {
   let origin = '';
 
   if (yt.artist && yt.artist !== 'NA' && yt.track && yt.track !== 'NA') {
-    artist = yt.artist; title = yt.track; origin = 'youtube-music';
+    artist = yt.artist;
+    title = yt.track;
+    origin = 'youtube-music';
   } else if (userInput && userInput.includes(' - ')) {
-    const [a, ...rest] = userInput.split(' - ');
-    const candidateArtist = a.trim();
-    const candidateTitle = rest.join(' - ').trim();
+    const parts = userInput.split(' - ');
+    const candidateArtist = parts[0].trim();
+    const candidateTitle = parts.slice(1).join(' - ').trim();
     if (looksClean(candidateArtist) && looksClean(candidateTitle)) {
-      artist = candidateArtist; title = candidateTitle; origin = 'hint';
+      artist = candidateArtist;
+      title = candidateTitle;
+      origin = 'hint';
     }
   }
 
@@ -133,28 +153,47 @@ function resolveFinalName(yt, userInput) {
     const cleaned = cleanYouTubeTitle(yt.title);
     let dashIdx = cleaned.indexOf(' - ');
     let sepLen = 3;
+
     if (dashIdx < 0) {
-      for (const sep of [' — ', ' – ', ' | ', ' • ', ' · ']) {
+      const altSeparators = [' \u2014 ', ' \u2013 ', ' | ', ' \u2022 ', ' \u00B7 '];
+      for (const sep of altSeparators) {
         const idx = cleaned.indexOf(sep);
         if (idx > 0) { dashIdx = idx; sepLen = sep.length; break; }
       }
     }
+
     if (dashIdx > 0) {
       artist = cleaned.slice(0, dashIdx).trim();
       title = cleaned.slice(dashIdx + sepLen).trim();
     } else {
       const channel = (yt.uploader || '').replace(/\s*-\s*Topic$/i, '').trim();
-      const isGeneric = /^(vibes|vibesonly|lyrics|lyric|letras|music|musica|música|chill|chillout|relax|songs|canciones|top|hits|hitsmusic|urban|pop|indie|latino|reggaeton|official|oficial|brunotraductor|traductor|latin\s*union)/i.test(channel);
-      if (isGeneric) { artist = ''; title = cleaned; }
-      else { artist = channel; title = cleaned; }
+      const isGeneric = /^(vibes|vibesonly|lyrics|lyric|letras|music|musica|m\u00FAsica|chill|chillout|relax|songs|canciones|top|hits|hitsmusic|urban|pop|indie|latino|reggaeton|official|oficial|brunotraductor|traductor|latin\s*union)/i.test(channel);
+      if (isGeneric) {
+        artist = '';
+        title = cleaned;
+      } else {
+        artist = channel;
+        title = cleaned;
+      }
     }
-       origin = 'youtube-parse';
+    origin = 'youtube-parse';
+
     if (!looksClean(artist) || !looksClean(title)) {
-      console.log(`   ⚠️  Parseo descartado: artist="${artist}" (${looksClean(artist) ? 'OK' : 'FALLÓ'}), title="${title}" (${looksClean(title) ? 'OK' : 'FALLÓ'})`);
-      if (userInput) { artist = ''; title = userInput; origin = 'user-input-fallback'; }
+      console.log('   Parseo descartado: artist="' + artist + '" (' + (looksClean(artist) ? 'OK' : 'FALLO') + '), title="' + title + '" (' + (looksClean(title) ? 'OK' : 'FALLO') + ')');
+      if (userInput) {
+        artist = '';
+        title = userInput;
+        origin = 'user-input-fallback';
+      }
     }
-  if (!title) { title = userInput || 'Sin título'; origin = origin || 'fallback'; }
-  const combined = artist ? `${artist} - ${title}` : title;
+  }
+
+  if (!title) {
+    title = userInput || 'Sin titulo';
+    origin = origin || 'fallback';
+  }
+
+  const combined = artist ? artist + ' - ' + title : title;
   return { artist, title, displayName: sanitizeDisplayName(combined), origin };
 }
 
@@ -167,28 +206,21 @@ export function normalizeKey(name) {
     .replace(/[^a-z0-9]/g, '');
 }
 
-// ═══════════════════════════════════════════════════════
-//  COOKIES: copiar a un archivo escribible
-// ═══════════════════════════════════════════════════════
 async function getWritableCookiesPath() {
   if (!fs.existsSync(COOKIES_FILE)) return null;
-  const tmpCookies = path.join(os.tmpdir(), `lumi-cookies-${crypto.randomUUID()}.txt`);
+  const tmpCookies = path.join(os.tmpdir(), 'lumi-cookies-' + crypto.randomUUID() + '.txt');
   await fsp.copyFile(COOKIES_FILE, tmpCookies);
   return tmpCookies;
 }
-
-// ═══════════════════════════════════════════════════════
-//  PROBE
-// ═══════════════════════════════════════════════════════
 
 export async function probeYoutube(query) {
   const cookies = await getWritableCookiesPath();
   const cmd = [
     'yt-dlp',
-    ...(cookies ? ['--cookies', `"${cookies}"`] : []),
+    ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
     '--no-config',
     ...YTDLP_COMMON_ARGS,
-    `"ytsearch1:${query.replace(/"/g, '')}"`,
+    '"ytsearch1:' + query.replace(/"/g, '') + '"',
     '--skip-download',
     '--no-warnings',
     '--print', '"@@TITLE@@%(title)s"',
@@ -209,31 +241,27 @@ export async function probeYoutube(query) {
   return { ...yt, ...resolved };
 }
 
-// ═══════════════════════════════════════════════════════
-//  DESCARGA + SUBIDA
-// ═══════════════════════════════════════════════════════
-
 export async function downloadAndUpload(query, displayNameHint, source = 'manual') {
   const jobId = crypto.randomUUID();
   const tmpBase = path.join(TMP_DIR, jobId);
-  const outTemplate = `${tmpBase}.%(ext)s`;
+  const outTemplate = tmpBase + '.%(ext)s';
   const cookies = await getWritableCookiesPath();
 
-  console.log(`🎵 Buscando en YouTube: "${query}"  [source=${source}]`);
+  console.log('Buscando en YouTube: "' + query + '"  [source=' + source + ']');
 
   const cmd = [
     'yt-dlp',
-    ...(cookies ? ['--cookies', `"${cookies}"`] : []),
+    ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
     '--no-config',
     ...YTDLP_COMMON_ARGS,
-    `"ytsearch1:${query.replace(/"/g, '')}"`,
+    '"ytsearch1:' + query.replace(/"/g, '') + '"',
     '-x',
     '--audio-format', 'mp3',
     '--audio-quality', '0',
     '--no-playlist',
     '--no-warnings',
     '-f', '"bestaudio*/best"',
-    '-o', `"${outTemplate}"`,
+    '-o', '"' + outTemplate + '"',
     '--print', '"@@TITLE@@%(title)s"',
     '--print', '"@@ARTIST@@%(artist)s"',
     '--print', '"@@TRACK@@%(track)s"',
@@ -251,38 +279,38 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   const yt = parseYtMetadata(stdout);
 
   if (!yt.file || !fs.existsSync(yt.file)) {
-    throw new Error(`No se encontró el archivo descargado.\nstdout:\n${stdout}`);
+    throw new Error('No se encontro el archivo descargado.\nstdout:\n' + stdout);
   }
 
-  console.log(`✅ Descargado temporalmente: ${path.basename(yt.file)}`);
-  console.log(`📺 Título YouTube: "${yt.title}"`);
-  if (yt.artist && yt.artist !== 'NA') console.log(`🎤 Artista YouTube: "${yt.artist}"`);
-  if (yt.uploader) console.log(`📡 Canal: "${yt.uploader}"`);
+  console.log('Descargado temporalmente: ' + path.basename(yt.file));
+  console.log('Titulo YouTube: "' + yt.title + '"');
+  if (yt.artist && yt.artist !== 'NA') console.log('Artista YouTube: "' + yt.artist + '"');
+  if (yt.uploader) console.log('Canal: "' + yt.uploader + '"');
 
   const { artist, title, displayName, origin } = resolveFinalName(yt, displayNameHint);
-  console.log(`📝 Nombre final: "${displayName}"  (origen: ${origin})`);
-  console.log(`🔎 iTunes buscará: "${artist}" / "${title}"`);
+  console.log('Nombre final: "' + displayName + '"  (origen: ' + origin + ')');
+  console.log('iTunes buscara: "' + artist + '" / "' + title + '"');
 
-  console.log(`🏷️  Buscando metadata en iTunes...`);
+  console.log('Buscando metadata en iTunes...');
   const meta = await tagMp3(yt.file, artist, title).catch((err) => {
-    console.warn(`⚠️  Metadata falló: ${err.message}`);
+    console.warn('Metadata fallo: ' + err.message);
     return null;
   });
 
   if (meta) {
-    console.log(`   → ${meta.artist} - ${meta.title}`);
-    if (meta.album) console.log(`   → Álbum: ${meta.album}${meta.year ? ` (${meta.year})` : ''}`);
-    if (meta.coverBuffer) console.log(`   → Portada descargada ✅`);
+    console.log('   -> ' + meta.artist + ' - ' + meta.title);
+    if (meta.album) console.log('   -> Album: ' + meta.album + (meta.year ? ' (' + meta.year + ')' : ''));
+    if (meta.coverBuffer) console.log('   -> Portada descargada OK');
   } else {
-    console.log(`   → Sin metadata`);
+    console.log('   -> Sin metadata');
   }
 
   let coverFileId = null;
-  if (meta?.coverBuffer) {
+  if (meta && meta.coverBuffer) {
     try {
       const coverRes = await drive.files.create({
         requestBody: {
-          name: `${displayName}.cover.jpg`,
+          name: displayName + '.cover.jpg',
           parents: [FOLDER_ID],
           mimeType: 'image/jpeg',
         },
@@ -290,16 +318,13 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
         fields: 'id',
       });
       coverFileId = coverRes.data.id;
-      console.log(`   → Portada subida: ${coverFileId}`);
+      console.log('   -> Portada subida: ' + coverFileId);
     } catch (err) {
-      console.warn(`⚠️  No se pudo subir la portada: ${err.message}`);
+      console.warn('No se pudo subir la portada: ' + err.message);
     }
   }
 
-  // ─── Subir el MP3 a Drive ─────────────────────────────
-  // ⚠️ CAMBIO: ya no guardamos ownerId/ownerUsername en las properties.
-  //    La asociación usuario↔canción vive en user-songs.json.
-  const uploadName = `${displayName}.mp3`;
+  const uploadName = displayName + '.mp3';
   const fileProperties = {
     source,
     ytTitle: yt.title || '',
@@ -319,7 +344,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   });
 
   await fsp.unlink(yt.file).catch(() => {});
-  console.log(`☁️  Subido a Drive: ${created.data.name} (${created.data.id})`);
+  console.log('Subido a Drive: ' + created.data.name + ' (' + created.data.id + ')');
 
   return { ...created.data, coverFileId };
 }
