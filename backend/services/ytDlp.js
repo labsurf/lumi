@@ -64,6 +64,13 @@ function cleanYouTubeTitle(title) {
     /\s*[\(\[]\s*(HD|HQ|4K|8K|1080p|720p|Full\s*HD)\s*[\)\]]/gi,
     /\s*[\(\[]\s*(remaster(ed)?|remasterizad[oa])\s*[\)\]]/gi,
     /\s*[\(\[]\s*prod\.?\s*[^\)\]]*[\)\]]/gi,
+    // ─── (Spanish Version), (Version en Español), etc. ──
+    /\s*[\(\[]\s*(spanish|espa[nñ]ol|english|original|live|acoustic|remix|cover|instrumental|karaoke)\s*version\s*[\)\]]/gi,
+    // ─── Limpiar guiones huérfanos al final ──────────────
+    /\s*[-–—]\s*[\)\]]/g,
+    // ─── Limpiar paréntesis vacíos ───────────────────────
+    /\(\s*\)/g,
+    /\[\s*\]/g,
     /\s+@[\w\.\-]+/g,
     /\s+#[\wáéíóúñ\-]+/gi,
     /[�◆▪▫■□●○▲△▼▽♫♬♪]+/g,
@@ -76,9 +83,17 @@ function cleanYouTubeTitle(title) {
 
 function looksClean(s) {
   if (!s) return false;
-  if (s.length > 60) return false;
-  if (s.split(/\s+/).length > 8) return false;
+  if (s.length > 80) return false;   // más permisivo
+
+  // Contar solo "palabras reales" (ignorar guiones, símbolos solos)
+  const realWords = s
+    .split(/\s+/)
+    .filter((w) => /[a-z0-9áéíóúñ]/i.test(w));  // debe tener al menos 1 letra/número
+  if (realWords.length > 12) return false;      // hasta 12 palabras reales
+
   if (/[\/\\|\[\]{}<>+~]/.test(s)) return false;
+
+  // Palabras basura — pero ya no incluir "spanish" ni "version"
   if (/\b(sub|subtitled|traducci[oó]n|traducido|espa[nñ]ol|english|lyric|letra|official|oficial|video|audio|remaster|hd|hq|4k)\b/i.test(s)) {
     return false;
   }
