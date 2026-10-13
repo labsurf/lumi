@@ -8,7 +8,7 @@ import os from 'os';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import { drive } from './auth.js';
-import { tagMp3 } from './metadata.js';
+import { tagMp3, resolveFromItunes } from './metadata.js';
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -180,11 +180,8 @@ function resolveFinalName(yt, userInput) {
 
     if (!looksClean(artist) || !looksClean(title)) {
       console.log('   Parseo descartado: artist="' + artist + '" (' + (looksClean(artist) ? 'OK' : 'FALLO') + '), title="' + title + '" (' + (looksClean(title) ? 'OK' : 'FALLO') + ')');
-      if (userInput) {
-        artist = '';
-        title = userInput;
-        origin = 'user-input-fallback';
-      }
+      // NO fallback. Marcamos como needs-itunes para que el caller lo resuelva.
+      origin = 'needs-itunes';
     }
   }
 
@@ -195,6 +192,68 @@ function resolveFinalName(yt, userInput) {
 
   const combined = artist ? artist + ' - ' + title : title;
   return { artist, title, displayName: sanitizeDisplayName(combined), origin };
+}
+
+/**
+ * Resuelve el nombre final usando iTunes como fuente de verdad.
+ * Solo se usa cuando el parseo normal falla (origin === 'needs-itunes').
+ */
+async function resolveNameWithItunes(yt, userInput) {
+  // 1. Extraer 2 candidatos del título de YouTube
+  const cleaned = cleanYouTubeTitle(yt.title || '');
+
+  let parts = null;
+  let sep = ' - ';
+  let idx = cleaned.indexOf(' - ');
+
+  if (idx < 0) {
+    for (const s of [' \u2014 ', ' \u2013 ', ' | ', ' \u2022 ', ' \u00B7 ']) {
+      const i = cleaned.indexOf(s);
+      if (i > 0) { idx = i; sep = s; break; }
+    }
+  }
+
+  if (idx > 0) {
+    parts = [
+      cleaned.slice(0, idx).trim(),
+      cleaned.slice(idx + sep.length).trim(),
+    ];
+  } else {
+    if (userInput && userInput.trim()) {
+      parts = [userInput.trim(), cleaned];
+    } else {
+      return null;
+    }
+  }
+
+  // Limpiar más agresivamente cada parte (quitar HQ AUDIO, emojis, etc.)
+  parts = parts.map(p =>
+    p
+      .replace(/\b(HQ|HD|4K|8K|AUDIO|VIDEO|OFICIAL|OFFICIAL|LYRICS?|LETRA)\b/gi, '')
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+      .replace(/[\u{2600}-\u{27BF}]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  ).filter(p => p.length > 0);
+
+  if (parts.length < 2) return null;
+
+  // 2. Preguntar a iTunes cuál es el orden correcto
+  console.log('   Consultando iTunes para desambiguar: "' + parts[0] + '" vs "' + parts[1] + '"');
+  const itunes = await resolveFromItunes(parts[0], parts[1]).catch(err => {
+    console.warn('   iTunes fallo: ' + err.message);
+    return null;
+  });
+
+  if (!itunes) return null;
+
+  return {
+    artist: itunes.artist,
+    title: itunes.title,
+    displayName: sanitizeDisplayName(itunes.artist + ' - ' + itunes.title),
+    origin: 'itunes-resolved',
+    itunesMeta: itunes,
+  };
 }
 
 export function normalizeKey(name) {
@@ -287,7 +346,35 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   if (yt.artist && yt.artist !== 'NA') console.log('Artista YouTube: "' + yt.artist + '"');
   if (yt.uploader) console.log('Canal: "' + yt.uploader + '"');
 
-  const { artist, title, displayName, origin } = resolveFinalName(yt, displayNameHint);
+  // Resolver nombre normal
+  let resolved = resolveFinalName(yt, displayNameHint);
+  let { artist, title, displayName, origin } = resolved;
+
+  // Si el parseo falló, intentar resolver con iTunes
+  if (origin === 'needs-itunes') {
+    console.log('   Parseo ambiguo, intentando resolver con iTunes...');
+    const itunesResolved = await resolveNameWithItunes(yt, displayNameHint).catch(err => {
+      console.warn('   resolveNameWithItunes fallo: ' + err.message);
+      return null;
+    });
+
+    if (itunesResolved) {
+      artist = itunesResolved.artist;
+      title = itunesResolved.title;
+      displayName = itunesResolved.displayName;
+      origin = itunesResolved.origin;
+      console.log('   iTunes resolvio: "' + displayName + '"');
+    } else {
+      console.log('   iTunes no pudo resolver, usando input del usuario');
+      if (displayNameHint) {
+        artist = '';
+        title = displayNameHint;
+        displayName = sanitizeDisplayName(displayNameHint);
+        origin = 'user-input-fallback';
+      }
+    }
+  }
+
   console.log('Nombre final: "' + displayName + '"  (origen: ' + origin + ')');
   console.log('iTunes buscara: "' + artist + '" / "' + title + '"');
 
