@@ -28,7 +28,7 @@ if ('serviceWorker' in navigator) {
 //   false → Fix DESACTIVADO (comportamiento anterior)
 //
 // Si algo falla, cambia a false y todo vuelve como antes.
-const IOS_BLUETOOTH_FIX = true;
+const IOS_BLUETOOTH_FIX = 'always-on';
 // ═══════════════════════════════════════════════════════
 //  SILENT AUDIO — SOLO Android
 // ═══════════════════════════════════════════════════════
@@ -48,9 +48,8 @@ let silentAudioStarted = false;
 
 function startSilentAudio() {
   // iOS sin fix: no usar
-  if (isIOS && !IOS_BLUETOOTH_FIX) return;
+  if (isIOS && IOS_BLUETOOTH_FIX === false) return;
 
-  // Ya arrancado: no volver a llamar play() (evita crash en iOS)
   if (silentAudioStarted) return;
   if (!silentAudio.paused) {
     silentAudioStarted = true;
@@ -66,11 +65,10 @@ function startSilentAudio() {
 
 function stopSilentAudio(force = false) {
   // iOS sin fix: no usar
-  if (isIOS && !IOS_BLUETOOTH_FIX) return;
+  if (isIOS && IOS_BLUETOOTH_FIX === false) return;
 
-  // iOS con fix: NO pausar (mantener sesión de audio viva)
-  // excepto si force = true (fin de la última canción)
-  if (isIOS && IOS_BLUETOOTH_FIX && !force) return;
+  // Opción A en iOS: NUNCA pausar, salvo force=true (app se cierra)
+  if (isIOS && IOS_BLUETOOTH_FIX === 'always-on' && !force) return;
 
   silentAudio.pause();
   silentAudioStarted = false;
@@ -329,12 +327,11 @@ function setupMediaSession() {
       if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
     });
 
-          navigator.mediaSession.setActionHandler('pause', () => {
+              navigator.mediaSession.setActionHandler('pause', () => {
       console.log('⏸️ MS: pause');
       audio.pause();
-      // iOS con fix: NO pausar silentAudio (mantiene sesión viva)
-      // iOS sin fix / Android: pausar normalmente
-      if (!isIOS || !IOS_BLUETOOTH_FIX) {
+      // iOS con always-on: NO pausar silentAudio nunca
+      if (!isIOS) {
         silentAudio.pause();
         silentAudioStarted = false;
       }
@@ -623,11 +620,11 @@ function formatTime(seconds) {
 playPauseBtn.onclick = () => {
   if (audio.paused) {
     audio.play();
-    startSilentAudio();   // startSilentAudio ya maneja el caso iOS internamente
+    startSilentAudio();
   } else {
     audio.pause();
-    // iOS con fix: NO pausar silentAudio (mantiene sesión viva)
-    if (!isIOS || !IOS_BLUETOOTH_FIX) {
+    // iOS con always-on: NO pausar silentAudio nunca
+    if (!isIOS) {
       silentAudio.pause();
       silentAudioStarted = false;
     }
