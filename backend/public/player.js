@@ -18,7 +18,17 @@ if ('serviceWorker' in navigator) {
       .catch((err) => console.warn('⚠️ SW error:', err));
   });
 }
-
+// ═══════════════════════════════════════════════════════
+//  ⚙️  CONFIGURACIÓN: FIX iOS BLUETOOTH
+// ═══════════════════════════════════════════════════════
+// Corrige el corte de audio en iOS con AirPods/Bluetooth
+// cuando la pantalla está bloqueada y pasa de canción.
+//
+//   true  → Fix ACTIVADO (silentAudio nunca se pausa en iOS)
+//   false → Fix DESACTIVADO (comportamiento anterior)
+//
+// Si algo falla, cambia a false y todo vuelve como antes.
+const IOS_BLUETOOTH_FIX = true;
 // ═══════════════════════════════════════════════════════
 //  SILENT AUDIO — SOLO Android
 // ═══════════════════════════════════════════════════════
@@ -34,17 +44,36 @@ silentAudio.preload = 'auto';
 silentAudio.setAttribute('playsinline', '');
 silentAudio.disableRemotePlayback = true;
 
+let silentAudioStarted = false;
+
 function startSilentAudio() {
-  if (isIOS) return;   // ← iOS NO usa silentAudio
-  if (!silentAudio.paused) return;
-  silentAudio.play().catch(err => {
-    console.warn('Audio silencioso (se reintentará al tocar):', err.message);
+  // iOS sin fix: no usar
+  if (isIOS && !IOS_BLUETOOTH_FIX) return;
+
+  // Ya arrancado: no volver a llamar play() (evita crash en iOS)
+  if (silentAudioStarted) return;
+  if (!silentAudio.paused) {
+    silentAudioStarted = true;
+    return;
+  }
+
+  silentAudio.play().then(() => {
+    silentAudioStarted = true;
+  }).catch(err => {
+    console.warn('Audio silencioso:', err.message);
   });
 }
 
-function stopSilentAudio() {
-  if (isIOS) return;   // ← iOS NO usa silentAudio
+function stopSilentAudio(force = false) {
+  // iOS sin fix: no usar
+  if (isIOS && !IOS_BLUETOOTH_FIX) return;
+
+  // iOS con fix: NO pausar (mantener sesión de audio viva)
+  // excepto si force = true (fin de la última canción)
+  if (isIOS && IOS_BLUETOOTH_FIX && !force) return;
+
   silentAudio.pause();
+  silentAudioStarted = false;
 }
 
 // Reintentar en Android si el navegador bloqueó la reproducción inicial
@@ -300,10 +329,15 @@ function setupMediaSession() {
       if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
     });
 
-      navigator.mediaSession.setActionHandler('pause', () => {
+          navigator.mediaSession.setActionHandler('pause', () => {
       console.log('⏸️ MS: pause');
       audio.pause();
-      if (!isIOS) silentAudio.pause();   // ← Solo Android
+      // iOS con fix: NO pausar silentAudio (mantiene sesión viva)
+      // iOS sin fix / Android: pausar normalmente
+      if (!isIOS || !IOS_BLUETOOTH_FIX) {
+        silentAudio.pause();
+        silentAudioStarted = false;
+      }
       navigator.mediaSession.playbackState = 'paused';
       if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
     });
@@ -559,7 +593,7 @@ function precargarSiguiente() {
 
 audio.onended = () => {
   if (currentIndex + 1 >= filtered.length) {
-    stopSilentAudio();
+    stopSilentAudio(true);   // ← force=true: parar aunque sea iOS con fix
   }
   playTrack(currentIndex + 1);
 };
@@ -589,10 +623,14 @@ function formatTime(seconds) {
 playPauseBtn.onclick = () => {
   if (audio.paused) {
     audio.play();
-    if (!isIOS) startSilentAudio();   // ← Solo Android
+    startSilentAudio();   // startSilentAudio ya maneja el caso iOS internamente
   } else {
     audio.pause();
-    if (!isIOS) silentAudio.pause();  // ← Solo Android
+    // iOS con fix: NO pausar silentAudio (mantiene sesión viva)
+    if (!isIOS || !IOS_BLUETOOTH_FIX) {
+      silentAudio.pause();
+      silentAudioStarted = false;
+    }
   }
 };
 
