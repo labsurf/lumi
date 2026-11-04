@@ -24,7 +24,7 @@ if (!fs.existsSync(COOKIES_FILE)) {
 }
 
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', 'youtube:player_client=default',
+  '--extractor-args', '"youtube:player_client=default;youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
