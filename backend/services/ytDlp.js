@@ -24,7 +24,7 @@ if (!fs.existsSync(COOKIES_FILE)) {
 
 // Argumentos compartidos para búsqueda y descarga (Incluye el POT Provider)
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', '"youtube:player_client=default"',
+  '--extractor-args', '"youtube:player_client=web"',
   '--extractor-args', '"youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
