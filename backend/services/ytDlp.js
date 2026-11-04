@@ -18,16 +18,10 @@ const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
 await fsp.mkdir(TMP_DIR, { recursive: true }).catch(() => {});
 
-if (!fs.existsSync(COOKIES_FILE)) {
-  console.warn('Warning: No se encontro ' + COOKIES_FILE);
-}
-
-// Argumentos compartidos para búsqueda y descarga (Incluye el POT Provider)
+// Argumentos para el respaldo de yt-dlp
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', '"youtube:player_client=mweb,tv,web_safari"',
+  '--extractor-args', '"youtube:player_client=default"',
   '--extractor-args', '"youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"',
-  '--extractor-args', '"youtube:player_skip=webpage,configs"',
-  '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
@@ -36,6 +30,10 @@ const YTDLP_COMMON_ARGS = [
   '--no-check-certificates',
   '--prefer-free-formats',
 ];
+
+// ═══════════════════════════════════════════════════════
+//  UTILIDADES
+// ═══════════════════════════════════════════════════════
 
 function sanitizeDisplayName(name) {
   return name
@@ -165,6 +163,86 @@ async function getWritableCookiesPath() {
   return tmpCookies;
 }
 
+// ═══════════════════════════════════════════════════════
+//  MÉTODO 1: VIDSSAVE (Inspirado en MediaSaver)
+// ═══════════════════════════════════════════════════════
+async function downloadWithVidssave(videoId) {
+  console.log('   Intentando descarga con Vidssave (Tier 1)...');
+  try {
+    const infoRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/parse', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Origin': 'https://pk.vidssave.com',
+        'Referer': 'https://pk.vidssave.com/',
+      },
+      body: new URLSearchParams({
+        hostname: 'pk.vidssave.com',
+        auth: '4c9b7d21',
+        domain: 'api-ak.vidssave.com',
+        origin: 'source',
+        link: `https://www.youtube.com/watch?v=${videoId}`,
+      }).toString(),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!infoRes.ok) throw new Error(`Vidssave parse falló: ${infoRes.status}`);
+    const infoJson = await infoRes.json();
+    if (!infoJson.data || !infoJson.data.resources) throw new Error('Vidssave no devolvió recursos.');
+
+    const audioResource = infoJson.data.resources.find((r) => r.type === 'audio');
+    if (!audioResource || !audioResource.resource_content) throw new Error('No se encontró recurso de audio.');
+
+    const dlRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Origin': 'https://pk.vidssave.com',
+        'Referer': 'https://pk.vidssave.com/',
+      },
+      body: new URLSearchParams({
+        hostname: 'pk.vidssave.com',
+        auth: '4c9b7d21',
+        domain: 'api-ak.vidssave.com',
+        request: audioResource.resource_content,
+        no_encrypt: '1',
+      }).toString(),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!dlRes.ok) throw new Error(`Vidssave download falló: ${dlRes.status}`);
+    const dlJson = await dlRes.json();
+    
+    // En MediaSaver, el enlace final viene en dlJson.data.url
+    const finalUrl = dlJson.data && (dlJson.data.url || dlJson.data.download_url || dlJson.data.link);
+    if (!finalUrl) throw new Error('No se pudo extraer la URL final del MP3.');
+
+    const mp3Res = await fetch(finalUrl, { signal: AbortSignal.timeout(60000) });
+    if (!mp3Res.ok) throw new Error(`Error al descargar MP3: ${mp3Res.status}`);
+
+    const jobId = crypto.randomUUID();
+    const filePath = path.join(TMP_DIR, `${jobId}.mp3`);
+    const fileStream = fs.createWriteStream(filePath);
+    
+    await new Promise((resolve, reject) => {
+      mp3Res.body.pipe(fileStream);
+      mp3Res.body.on('error', reject);
+      fileStream.on('finish', resolve);
+    });
+
+    console.log('   ✅ Vidssave descargó el audio con éxito.');
+    return filePath;
+  } catch (err) {
+    console.warn('   ⚠️ Vidssave falló:', err.message);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  PROBE
+// ═══════════════════════════════════════════════════════
 export async function probeYoutube(query) {
   const cmd = [
     'yt-dlp',
@@ -186,6 +264,9 @@ export async function probeYoutube(query) {
   return { ...yt, ...resolveFinalName(yt, query) };
 }
 
+// ═══════════════════════════════════════════════════════
+//  DESCARGA PRINCIPAL
+// ═══════════════════════════════════════════════════════
 export async function downloadAndUpload(query, displayNameHint, source = 'manual') {
   const jobId = crypto.randomUUID();
   const tmpBase = path.join(TMP_DIR, jobId);
@@ -217,34 +298,40 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     throw new Error('La búsqueda no devolvió un video válido. Intenta con otro nombre.');
   }
 
+  const videoId = yt.url.split('v=')[1];
   console.log('   URL del video:', yt.url);
 
-  // 2. Descargar con yt-dlp (usando cookies y POT)
-  const downloadCmd = [
-    'yt-dlp',
-    ...(cookies ? ['--cookies', `"${cookies}"`] : []),
-    '--no-config',
-    ...YTDLP_COMMON_ARGS,
-    `"${yt.url}"`,
-    '-x',
-    '--audio-format', 'mp3',
-    '--audio-quality', '0',
-    '--no-playlist',
-    '--no-warnings',
-    '-f', '"bestaudio*/best"',
-    '-o', `"${outTemplate}"`,
-    '--print', '"after_move:@@FILE@@%(filepath)s"',
-  ].join(' ');
+  // 2. Intentar descarga con Vidssave (Tier 1)
+  let ytFilePath = await downloadWithVidssave(videoId);
 
-  let ytFilePath = null;
-  try {
-    const { stdout: dlStdout } = await execAsync(downloadCmd, { maxBuffer: 20 * 1024 * 1024, windowsHide: true, timeout: 120000 });
-    ytFilePath = parseYtMetadata(dlStdout).file;
-  } catch (err) {
-    console.error('   Error en yt-dlp:', err.message);
-    throw new Error('YouTube bloqueó la descarga. Intenta de nuevo más tarde.');
-  } finally {
-    if (cookies) await fsp.unlink(cookies).catch(() => {});
+  // 3. Fallback a yt-dlp si Vidssave falló
+  if (!ytFilePath) {
+    console.log('   ⚠️ Vidssave falló, usando yt-dlp como respaldo...');
+    const downloadCmd = [
+      'yt-dlp',
+      ...(cookies ? ['--cookies', `"${cookies}"`] : []),
+      '--no-config',
+      ...YTDLP_COMMON_ARGS,
+      `"${yt.url}"`,
+      '-x',
+      '--audio-format', 'mp3',
+      '--audio-quality', '0',
+      '--no-playlist',
+      '--no-warnings',
+      '-f', '"bestaudio*/best"',
+      '-o', `"${outTemplate}"`,
+      '--print', '"after_move:@@FILE@@%(filepath)s"',
+    ].join(' ');
+
+    try {
+      const { stdout: dlStdout } = await execAsync(downloadCmd, { maxBuffer: 20 * 1024 * 1024, windowsHide: true, timeout: 120000 });
+      ytFilePath = parseYtMetadata(dlStdout).file;
+    } catch (err) {
+      console.error('   Error en yt-dlp:', err.message);
+      throw new Error('YouTube bloqueó la descarga. Intenta de nuevo más tarde.');
+    } finally {
+      if (cookies) await fsp.unlink(cookies).catch(() => {});
+    }
   }
 
   if (!ytFilePath || !fs.existsSync(ytFilePath)) {
@@ -253,6 +340,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
 
   console.log('Descargado temporalmente: ' + path.basename(ytFilePath));
   
+  // 4. Metadata y subida a Drive
   let resolved = resolveFinalName(yt, displayNameHint);
   let { artist, title, displayName, origin } = resolved;
 
