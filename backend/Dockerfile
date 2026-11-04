@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y \
 RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
 ENV PATH="/usr/local/bin:${PATH}"
 
-# ── yt-dude (fork de yt-dlp diseñado para evitar bloqueos 403) ──
-RUN pip3 install --no-cache-dir --break-system-packages -U "yt-dude"
+# ── yt-dlp nightly (la versión más reciente para evitar 403) ──
+RUN pip3 install --no-cache-dir --break-system-packages -U --pre "yt-dlp[default]"
 
 # ── Dependencias de Node ──────────────────────────────
 COPY package*.json ./
