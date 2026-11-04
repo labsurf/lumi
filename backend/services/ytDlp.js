@@ -24,8 +24,10 @@ if (!fs.existsSync(COOKIES_FILE)) {
 
 // Argumentos compartidos para búsqueda y descarga (Incluye el POT Provider)
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', '"youtube:player_client=web"',
+  '--extractor-args', '"youtube:player_client=mweb,tv,web_safari"',
   '--extractor-args', '"youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"',
+  '--extractor-args', '"youtube:player_skip=webpage,configs"',
+  '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
