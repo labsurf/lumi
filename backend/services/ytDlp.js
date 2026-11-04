@@ -167,159 +167,294 @@ async function getWritableCookiesPath() {
 // ═══════════════════════════════════════════════════════
 //  MÉTODO 1: VIDSSAVE (Inspirado en MediaSaver)
 // ═══════════════════════════════════════════════════════
+// Vidssave: el campo data puede venir como objeto JSON o como AES-256-CBC en Base64.
+// Clave/IV reproducidos de la implementación pública consultada; si el proveedor
+// cambia el protocolo, el diagnóstico mostrará el error sin imprimir datos sensibles.
+function decodeVidssaveData(data) {
+  if (data && typeof data === 'object') return data;
+  if (typeof data !== 'string' || !data.trim()) {
+    throw new Error('Vidssave devolvió data vacío o con formato no reconocido.');
+  }
+
+  const rawKey = '4c9b7d2e'.repeat(3) + '4c9b7d21';
+  const key = Buffer.from(rawKey, 'utf8');
+  const iv = Buffer.from(rawKey.slice(0, 16), 'utf8');
+  const ciphertext = Buffer.from(data, 'base64');
+
+  if (!ciphertext.length || ciphertext.length % 16 !== 0) {
+    throw new Error('Vidssave devolvió data cifrado con longitud inválida.');
+  }
+
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  decipher.setAutoPadding(false);
+  const decrypted = Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]);
+
+  // El protocolo publicado utiliza padding con bytes NUL, no PKCS#7.
+  let end = decrypted.length;
+  while (end > 0 && decrypted[end - 1] === 0) end--;
+
+  try {
+    return JSON.parse(decrypted.subarray(0, end).toString('utf8'));
+  } catch {
+    throw new Error('No se pudo interpretar el contenido descifrado de Vidssave.');
+  }
+}
+
+function getSseEventPayload(eventText) {
+  const dataLines = eventText
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).replace(/^ /, ''));
+
+  if (!dataLines.length) return null;
+
+  const raw = dataLines.join('\n').trim();
+  if (!raw || raw === '[DONE]') return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function waitForVidssaveDownloadLink(taskId) {
+  const sseUrl = new URL('https://api.vidssave.com/sse/contentsite_api/media/download_query');
+  sseUrl.search = new URLSearchParams({
+    auth: '20250901majwlqo',
+    domain: 'api-ak.vidssave.com',
+    task_id: taskId,
+    download_domain: 'vidssave.com',
+    origin: 'content_site',
+  }).toString();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+  let reader;
+
+  try {
+    const response = await fetch(sseUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Referer': 'https://vidssave.com/',
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Vidssave SSE respondió HTTP ${response.status}.`);
+    }
+    if (!response.body) {
+      throw new Error('Vidssave SSE no devolvió un cuerpo de respuesta.');
+    }
+
+    reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE delimita cada evento con una línea vacía. No intentamos parsear
+      // fragmentos parciales, porque un JSON puede llegar dividido entre chunks.
+      let boundary;
+      while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
+        const eventText = buffer.slice(0, boundary);
+        const separator = buffer.slice(boundary).match(/^\r?\n\r?\n/)[0];
+        buffer = buffer.slice(boundary + separator.length);
+
+        const payload = getSseEventPayload(eventText);
+        if (!payload) continue;
+
+        if (payload.download_link && typeof payload.download_link === 'string') {
+          return payload.download_link;
+        }
+
+        if (payload.status === 0 || payload.status === '0' || payload.error) {
+          const message = String(payload.msg || payload.error || 'La tarea de descarga falló.').slice(0, 200);
+          throw new Error(`Vidssave SSE: ${message}`);
+        }
+      }
+    }
+
+    // Algunos servidores cierran el stream después del último evento sin
+    // enviar el separador final; procesamos ese evento residual una sola vez.
+    const finalPayload = getSseEventPayload(buffer);
+    if (finalPayload?.download_link && typeof finalPayload.download_link === 'string') {
+      return finalPayload.download_link;
+    }
+
+    throw new Error('Vidssave SSE terminó sin entregar download_link.');
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Tiempo agotado esperando el enlace de descarga de Vidssave (90 s).');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+    if (reader) await reader.cancel().catch(() => {});
+  }
+}
+
 async function downloadWithVidssave(videoId) {
   console.log('   Intentando descarga con Vidssave (Tier 1)...');
 
   let filePath = null;
 
   try {
-    const infoRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/parse', {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const commonHeaders = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      'Origin': 'https://vidssave.com',
+      'Referer': 'https://vidssave.com/',
+    };
+
+    // 1. Solicitar el análisis del video.
+    const parseRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/parse', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        'Origin': 'https://pk.vidssave.com',
-        'Referer': 'https://pk.vidssave.com/',
-      },
+      headers: commonHeaders,
       body: new URLSearchParams({
-        hostname: 'pk.vidssave.com',
+        hostname: 'vidssave.com',
         auth: '4c9b7d21',
         domain: 'api-ak.vidssave.com',
         origin: 'source',
-        link: `https://www.youtube.com/watch?v=${videoId}`,
+        link: videoUrl,
       }).toString(),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(20000),
     });
 
-    // Leemos el cuerpo una sola vez para poder diagnosticar también respuestas no-JSON.
-    const infoContentType = infoRes.headers.get('content-type') || '(sin content-type)';
-    const infoText = await infoRes.text();
-
-    let infoJson;
+    const parseText = await parseRes.text();
+    let parseJson;
     try {
-      infoJson = JSON.parse(infoText);
+      parseJson = JSON.parse(parseText);
     } catch {
-      console.warn(
-        `   ⚠️ Vidssave parse: HTTP ${infoRes.status}; content-type=${infoContentType}; ` +
-        `respuesta no JSON (${infoText.length} caracteres).`
-      );
-      throw new Error(`Vidssave parse devolvió una respuesta no JSON (HTTP ${infoRes.status}).`);
+      throw new Error(`Vidssave parse devolvió contenido no JSON (HTTP ${parseRes.status}).`);
     }
 
-    const rootKeys = infoJson && typeof infoJson === 'object'
-      ? Object.keys(infoJson)
-      : [];
-    const dataKeys = infoJson?.data && typeof infoJson.data === 'object'
-      ? Object.keys(infoJson.data)
-      : [];
-    const resources = Array.isArray(infoJson?.data?.resources)
-      ? infoJson.data.resources
-      : [];
-
+    const parseMsg = String(parseJson?.msg || '').slice(0, 180);
     console.log(
-      `   Vidssave parse: HTTP ${infoRes.status}; content-type=${infoContentType}; ` +
-      `rootKeys=[${rootKeys.join(',')}]; dataKeys=[${dataKeys.join(',')}]; ` +
-      `resources=${resources.length}.`
+      `   Vidssave parse: HTTP ${parseRes.status}; status=${String(parseJson?.status)}; ` +
+      `status_code=${String(parseJson?.status_code)}; msg="${parseMsg}"; ` +
+      `dataType=${typeof parseJson?.data}.`
     );
 
-    if (!infoRes.ok) {
-      const apiMessage = String(
-        infoJson?.message || infoJson?.error || infoJson?.data?.message || ''
-      ).slice(0, 240);
-      throw new Error(
-        `Vidssave parse falló: HTTP ${infoRes.status}` +
-        (apiMessage ? ` (${apiMessage})` : '')
-      );
+    if (!parseRes.ok) {
+      throw new Error(`Vidssave parse HTTP ${parseRes.status}: ${parseMsg || 'error del proveedor'}`);
+    }
+    if (Number(parseJson?.status) !== 1 || parseJson?.data == null) {
+      throw new Error(`Vidssave rechazó el análisis: ${parseMsg || `status=${String(parseJson?.status)}`}`);
     }
 
-    if (!Array.isArray(infoJson?.data?.resources)) {
-      throw new Error(
-        `Vidssave no devolvió data.resources. dataKeys=[${dataKeys.join(',')}].`
-      );
+    const parsedData = decodeVidssaveData(parseJson.data);
+    const resources = Array.isArray(parsedData?.resources) ? parsedData.resources : [];
+
+    console.log(
+      `   Vidssave parse OK: titlePresent=${Boolean(parsedData?.title)}; ` +
+      `resources=${resources.length}; resourceTypes=[${resources.map(r => String(r?.type || '?')).slice(0, 10).join(',')}].`
+    );
+
+    if (!resources.length) {
+      throw new Error('Vidssave aceptó el análisis, pero no devolvió recursos descargables.');
     }
 
-    const resourceTypes = resources
-      .map((resource) => String(resource?.type || '(sin tipo)'))
-      .slice(0, 12);
-    console.log(`   Vidssave tipos de recursos: [${resourceTypes.join(', ')}].`);
+    // LuMi necesita audio; no elegimos un recurso de video como sustituto.
+    const audioResource = resources.find((resource) =>
+      String(resource?.type || '').toLowerCase() === 'audio' &&
+      typeof resource?.resource_content === 'string' &&
+      resource.resource_content.length > 0
+    );
 
-    const audioResource = resources.find((resource) => resource?.type === 'audio');
-    if (!audioResource || !audioResource.resource_content) {
-      throw new Error('Vidssave no entregó un recurso de audio con resource_content.');
+    if (!audioResource) {
+      throw new Error('Vidssave no ofreció un recurso de audio con resource_content.');
     }
 
-    const dlRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/download', {
+    // 2. Crear la tarea de descarga del recurso de audio.
+    const downloadRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/download', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Origin': 'https://pk.vidssave.com',
-        'Referer': 'https://pk.vidssave.com/',
-      },
+      headers: commonHeaders,
       body: new URLSearchParams({
-        hostname: 'pk.vidssave.com',
+        hostname: 'vidssave.com',
         auth: '4c9b7d21',
         domain: 'api-ak.vidssave.com',
         request: audioResource.resource_content,
         no_encrypt: '1',
       }).toString(),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(20000),
     });
 
-    const dlContentType = dlRes.headers.get('content-type') || '(sin content-type)';
-    const dlText = await dlRes.text();
-
-    let dlJson;
+    const downloadText = await downloadRes.text();
+    let downloadJson;
     try {
-      dlJson = JSON.parse(dlText);
+      downloadJson = JSON.parse(downloadText);
     } catch {
-      console.warn(
-        `   ⚠️ Vidssave download: HTTP ${dlRes.status}; content-type=${dlContentType}; ` +
-        `respuesta no JSON (${dlText.length} caracteres).`
-      );
-      throw new Error(`Vidssave download devolvió una respuesta no JSON (HTTP ${dlRes.status}).`);
+      throw new Error(`Vidssave download devolvió contenido no JSON (HTTP ${downloadRes.status}).`);
     }
 
-    const dlDataKeys = dlJson?.data && typeof dlJson.data === 'object'
-      ? Object.keys(dlJson.data)
-      : [];
+    const downloadMsg = String(downloadJson?.msg || '').slice(0, 180);
     console.log(
-      `   Vidssave download: HTTP ${dlRes.status}; content-type=${dlContentType}; ` +
-      `dataKeys=[${dlDataKeys.join(',')}].`
+      `   Vidssave download: HTTP ${downloadRes.status}; status=${String(downloadJson?.status)}; ` +
+      `status_code=${String(downloadJson?.status_code)}; msg="${downloadMsg}"; ` +
+      `dataType=${typeof downloadJson?.data}.`
     );
 
-    if (!dlRes.ok) {
-      const apiMessage = String(
-        dlJson?.message || dlJson?.error || dlJson?.data?.message || ''
-      ).slice(0, 240);
-      throw new Error(
-        `Vidssave download falló: HTTP ${dlRes.status}` +
-        (apiMessage ? ` (${apiMessage})` : '')
-      );
+    if (!downloadRes.ok) {
+      throw new Error(`Vidssave download HTTP ${downloadRes.status}: ${downloadMsg || 'error del proveedor'}`);
+    }
+    if (Number(downloadJson?.status) !== 1 || downloadJson?.data == null) {
+      throw new Error(`Vidssave no creó la tarea: ${downloadMsg || `status=${String(downloadJson?.status)}`}`);
     }
 
-    // Se conserva el contrato que ya utilizaba el proyecto; no se inventan campos nuevos.
-    const finalUrl = dlJson?.data?.url || dlJson?.data?.download_url || dlJson?.data?.link;
-    if (!finalUrl || typeof finalUrl !== 'string') {
-      throw new Error(
-        `Vidssave no devolvió data.url, data.download_url ni data.link. dataKeys=[${dlDataKeys.join(',')}].`
-      );
+    const downloadData = decodeVidssaveData(downloadJson.data);
+    const taskId = downloadData?.task_id;
+
+    if (!taskId || typeof taskId !== 'string') {
+      throw new Error('Vidssave respondió correctamente, pero no entregó task_id.');
     }
 
-    const mp3Res = await fetch(finalUrl, { signal: AbortSignal.timeout(60000) });
-    if (!mp3Res.ok) {
-      throw new Error(`Error al descargar el audio desde Vidssave: HTTP ${mp3Res.status}`);
+    console.log('   Vidssave: tarea de audio creada; esperando resultado SSE...');
+
+    // 3. Esperar el enlace firmado mediante Server-Sent Events.
+    const downloadLink = await waitForVidssaveDownloadLink(taskId);
+
+    // 4. Descargar el archivo. fetch sigue redirecciones HTTP por defecto.
+    // No se registra la URL firmada porque puede contener credenciales temporales.
+    const audioRes = await fetch(downloadLink, {
+      method: 'GET',
+      headers: {
+        'User-Agent': commonHeaders['User-Agent'],
+        'Referer': 'https://vidssave.com/',
+      },
+      signal: AbortSignal.timeout(120000),
+      redirect: 'follow',
+    });
+
+    if (!audioRes.ok) {
+      throw new Error(`El enlace de Vidssave respondió HTTP ${audioRes.status}.`);
     }
-    if (!mp3Res.body) {
-      throw new Error('Vidssave devolvió una respuesta de descarga sin contenido.');
+    if (!audioRes.body) {
+      throw new Error('El enlace de Vidssave no devolvió contenido.');
+    }
+
+    const contentType = (audioRes.headers.get('content-type') || '').toLowerCase();
+    if (contentType.includes('text/html') || contentType.includes('application/json')) {
+      throw new Error(`Vidssave devolvió una página/respuesta (${contentType}), no el archivo de audio.`);
     }
 
     const jobId = crypto.randomUUID();
     filePath = path.join(TMP_DIR, `${jobId}.mp3`);
 
-    // fetch() entrega un Web ReadableStream; se convierte al stream de Node.js.
     await pipelineAsync(
-      Readable.fromWeb(mp3Res.body),
+      Readable.fromWeb(audioRes.body),
       fs.createWriteStream(filePath)
     );
 
