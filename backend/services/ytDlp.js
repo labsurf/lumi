@@ -23,7 +23,7 @@ if (!fs.existsSync(COOKIES_FILE)) {
 }
 
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', 'youtube:player_client=tv,mweb,web_safari',
+  '--extractor-args', 'youtube:player_client=android',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--no-check-certificates',
