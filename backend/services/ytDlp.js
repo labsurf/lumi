@@ -9,7 +9,7 @@ import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import { drive } from './auth.js';
 import { tagMp3, resolveFromItunes } from './metadata.js';
-import { downloadYouTubeAudioReliable } from 'yt-innertube'; // <-- NUEVO IMPORT
+import { downloadYouTubeAudioReliable } from 'yt-innertube'; 
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,7 +45,6 @@ function sanitizeDisplayName(name) {
 
 function cleanYouTubeTitle(title) {
   let t = title || '';
-
   const patterns = [
     /\s*[\(\[]\s*(videoclip|video\s*-?\s*clip|clip)\s*(oficial)?\s*[\)\]]/gi,
     /\s*[\(\[]\s*v[ií]deo\s*oficial\s*[\)\]]/gi,
@@ -72,7 +71,6 @@ function cleanYouTubeTitle(title) {
     /[\uFFFD\u25C6\u25AA\u25AB\u25A0\u25A1\u25CF\u25CB\u25B2\u25B3\u25BC\u25BD\u266B\u266C\u266A]+/g,
     /\/\/.*$/g,
   ];
-
   for (const p of patterns) t = t.replace(p, '');
   t = t.replace(/\s*-\s*Topic\s*$/i, '');
   return t.replace(/\s+/g, ' ').trim();
@@ -89,33 +87,28 @@ function looksClean(s) {
 }
 
 function parseYtMetadata(stdout) {
-  const result = { file: null, title: null, artist: null, track: null, uploader: null };
+  const result = { file: null, title: null, artist: null, track: null, uploader: null, url: null };
   for (const line of stdout.split(/\r?\n/)) {
     if (line.startsWith('@@FILE@@')) result.file = line.slice(8).trim();
     else if (line.startsWith('@@TITLE@@')) result.title = line.slice(9).trim();
     else if (line.startsWith('@@ARTIST@@')) result.artist = line.slice(10).trim();
     else if (line.startsWith('@@TRACK@@')) result.track = line.slice(9).trim();
     else if (line.startsWith('@@UPLOADER@@')) result.uploader = line.slice(12).trim();
+    else if (line.startsWith('@@URL@@')) result.url = line.slice(7).trim();
   }
   return result;
 }
 
 function resolveFinalName(yt, userInput) {
-  let artist = '';
-  let title = '';
-  let origin = '';
-
+  let artist = ''; let title = ''; let origin = '';
   if (yt.artist && yt.artist !== 'NA' && yt.track && yt.track !== 'NA') {
     artist = yt.artist; title = yt.track; origin = 'youtube-music';
   } else if (userInput && userInput.includes(' - ')) {
     const parts = userInput.split(' - ');
-    const candidateArtist = parts[0].trim();
-    const candidateTitle = parts.slice(1).join(' - ').trim();
-    if (looksClean(candidateArtist) && looksClean(candidateTitle)) {
-      artist = candidateArtist; title = candidateTitle; origin = 'hint';
+    if (looksClean(parts[0].trim()) && looksClean(parts.slice(1).join(' - ').trim())) {
+      artist = parts[0].trim(); title = parts.slice(1).join(' - ').trim(); origin = 'hint';
     }
   }
-
   if (!artist && !title && yt.title) {
     const cleaned = cleanYouTubeTitle(yt.title);
     let dashIdx = cleaned.indexOf(' - ');
@@ -127,18 +120,14 @@ function resolveFinalName(yt, userInput) {
       }
     }
     if (dashIdx > 0) {
-      artist = cleaned.slice(0, dashIdx).trim();
-      title = cleaned.slice(dashIdx + sepLen).trim();
+      artist = cleaned.slice(0, dashIdx).trim(); title = cleaned.slice(dashIdx + sepLen).trim();
     } else {
       const channel = (yt.uploader || '').replace(/\s*-\s*Topic$/i, '').trim();
       const isGeneric = /^(vibes|vibesonly|lyrics|lyric|letras|music|musica|m\u00FAsica|chill|chillout|relax|songs|canciones|top|hits|hitsmusic|urban|pop|indie|latino|reggaeton|official|oficial|brunotraductor|traductor|latin\s*union)/i.test(channel);
-      if (isGeneric) { artist = ''; title = cleaned; }
-      else { artist = channel; title = cleaned; }
+      if (isGeneric) { artist = ''; title = cleaned; } else { artist = channel; title = cleaned; }
     }
     origin = 'youtube-parse';
-    if (!looksClean(artist) || !looksClean(title)) {
-      origin = 'needs-itunes';
-    }
+    if (!looksClean(artist) || !looksClean(title)) { origin = 'needs-itunes'; }
   }
   if (!title) { title = userInput || 'Sin titulo'; origin = origin || 'fallback'; }
   return { artist, title, displayName: sanitizeDisplayName(artist ? artist + ' - ' + title : title), origin };
@@ -155,10 +144,8 @@ async function resolveNameWithItunes(yt, userInput) {
   }
   if (idx > 0) { parts = [cleaned.slice(0, idx).trim(), cleaned.slice(idx + sep.length).trim()]; }
   else { if (userInput && userInput.trim()) parts = [userInput.trim(), cleaned]; else return null; }
-
   parts = parts.map(p => p.replace(/\b(HQ|HD|4K|8K|AUDIO|VIDEO|OFICIAL|OFFICIAL|LYRICS?|LETRA)\b/gi, '').replace(/[\u{1F300}-\u{1FAFF}]/gu, '').replace(/[\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim()).filter(p => p.length > 0);
   if (parts.length < 2) return null;
-
   const itunes = await resolveFromItunes(parts[0], parts[1]).catch(() => null);
   if (!itunes) return null;
   return { artist: itunes.artist, title: itunes.title, displayName: sanitizeDisplayName(itunes.artist + ' - ' + itunes.title), origin: 'itunes-resolved' };
@@ -176,22 +163,24 @@ async function getWritableCookiesPath() {
 }
 
 export async function probeYoutube(query) {
-  const cookies = await getWritableCookiesPath();
+  // La búsqueda se hace SIN cookies para que no se cuelgue, y con --flat-playlist para que sea rápida
   const cmd = [
     'yt-dlp',
-    ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
-    '--no-config', ...YTDLP_COMMON_ARGS,
-    '"ytsearch1:' + query.replace(/"/g, '') + '"',
+    '--no-config', 
+    '--extractor-args', 'youtube:player_client=default',
+    '--flat-playlist',
     '--skip-download', '--no-warnings',
+    '"ytsearch1:' + query.replace(/"/g, '') + '"',
     '--print', '"@@TITLE@@%(title)s"',
     '--print', '"@@ARTIST@@%(artist)s"',
     '--print', '"@@TRACK@@%(track)s"',
     '--print', '"@@UPLOADER@@%(uploader)s"',
+    '--print', '"@@URL@@%(webpage_url)s"',
   ].join(' ');
 
-  const { stdout } = await execAsync(cmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 40000 });
-  if (cookies) await fsp.unlink(cookies).catch(() => {});
-  return { ...parseYtMetadata(stdout), ...resolveFinalName(parseYtMetadata(stdout), query) };
+  const { stdout } = await execAsync(cmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 20000 });
+  const yt = parseYtMetadata(stdout);
+  return { ...yt, ...resolveFinalName(yt, query) };
 }
 
 export async function downloadAndUpload(query, displayNameHint, source = 'manual') {
@@ -202,40 +191,35 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
 
   console.log('Buscando en YouTube: "' + query + '"  [source=' + source + ']');
 
-  // 1. Buscar el video con yt-dlp (rápido, solo metadatos)
+  // 1. Buscar el video (SIN cookies para evitar bloqueos de búsqueda)
   const searchCmd = [
     'yt-dlp',
-    ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
-    '--no-config', ...YTDLP_COMMON_ARGS,
-    '"ytsearch1:' + query.replace(/"/g, '') + '"',
+    '--no-config', 
+    '--extractor-args', 'youtube:player_client=default',
+    '--flat-playlist',
     '--skip-download', '--no-warnings',
+    '"ytsearch1:' + query.replace(/"/g, '') + '"',
     '--print', '"@@TITLE@@%(title)s"',
     '--print', '"@@ARTIST@@%(artist)s"',
     '--print', '"@@TRACK@@%(track)s"',
     '--print', '"@@UPLOADER@@%(uploader)s"',
-    '--print', '"@@URL@@%(webpage_url)s"', // <-- Obtenemos la URL del video
+    '--print', '"@@URL@@%(webpage_url)s"',
   ].join(' ');
 
-  const { stdout: searchStdout } = await execAsync(searchCmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 40000 });
+  const { stdout: searchStdout } = await execAsync(searchCmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 20000 });
   const yt = parseYtMetadata(searchStdout);
-  
-  // Extraer la URL del video de la salida (línea @@URL@@)
-  let videoUrl = null;
-  for (const line of searchStdout.split(/\r?\n/)) {
-    if (line.startsWith('@@URL@@')) { videoUrl = line.slice(7).trim(); break; }
+
+  if (!yt.url) {
+    throw new Error('No se pudo encontrar el video en YouTube para: ' + query);
   }
 
-  if (!videoUrl) {
-    throw new Error('No se pudo obtener la URL del video de YouTube.');
-  }
+  console.log('   URL del video:', yt.url);
 
-  console.log('   URL del video:', videoUrl);
-
-  // 2. Descargar el audio usando yt-innertube (sin cookies, evita 403)
+  // 2. Descargar usando yt-innertube
   let ytFilePath = null;
   try {
     console.log('   Intentando descarga con yt-innertube...');
-    const result = await downloadYouTubeAudioReliable(videoUrl, 0, 0, null, TMP_DIR, jobId + '.mp3');
+    const result = await downloadYouTubeAudioReliable(yt.url, 0, 0, null, TMP_DIR, jobId + '.mp3');
     if (result.path) {
       ytFilePath = result.path;
       console.log('   ✅ yt-innertube descargó el audio con éxito.');
@@ -244,12 +228,11 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     }
   } catch (innertubeError) {
     console.warn('   ⚠️ yt-innertube falló, usando yt-dlp como respaldo:', innertubeError.message);
-    // Fallback a yt-dlp original
     const downloadCmd = [
       'yt-dlp',
       ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
       '--no-config', ...YTDLP_COMMON_ARGS,
-      '"' + videoUrl + '"', // Usamos la URL directa
+      '"' + yt.url + '"', 
       '-x', '--audio-format', 'mp3', '--audio-quality', '0',
       '--no-playlist', '--no-warnings', '-f', '"bestaudio*/best"',
       '-o', '"' + outTemplate + '"',
@@ -257,7 +240,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     ].join(' ');
 
     const { stdout: dlStdout } = await execAsync(downloadCmd, { maxBuffer: 20 * 1024 * 1024, windowsHide: true, timeout: 120000 });
-    ytFilePath = dlStdout.trim().split(/\r?\n/).filter(l => l.startsWith('@@FILE@@')).pop()?.slice(8).trim();
+    ytFilePath = parseYtMetadata(dlStdout).file;
     if (!ytFilePath || !fs.existsSync(ytFilePath)) {
       throw new Error('Tanto yt-innertube como yt-dlp fallaron al descargar el audio.');
     }
@@ -265,41 +248,23 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     if (cookies) await fsp.unlink(cookies).catch(() => {});
   }
 
-  if (!ytFilePath || !fs.existsSync(ytFilePath)) {
-    throw new Error('No se encontró el archivo de audio descargado.');
-  }
-
   console.log('Descargado temporalmente: ' + path.basename(ytFilePath));
-  console.log('Titulo YouTube: "' + yt.title + '"');
-  if (yt.artist && yt.artist !== 'NA') console.log('Artista YouTube: "' + yt.artist + '"');
-  if (yt.uploader) console.log('Canal: "' + yt.uploader + '"');
-
+  
   let resolved = resolveFinalName(yt, displayNameHint);
   let { artist, title, displayName, origin } = resolved;
 
   if (origin === 'needs-itunes') {
-    console.log('   Parseo ambiguo, intentando resolver con iTunes...');
     const itunesResolved = await resolveNameWithItunes(yt, displayNameHint).catch(() => null);
     if (itunesResolved) {
       artist = itunesResolved.artist; title = itunesResolved.title; displayName = itunesResolved.displayName; origin = itunesResolved.origin;
-      console.log('   iTunes resolvio: "' + displayName + '"');
-    } else {
-      if (displayNameHint) { artist = ''; title = displayNameHint; displayName = sanitizeDisplayName(displayNameHint); origin = 'user-input-fallback'; }
+    } else if (displayNameHint) {
+      artist = ''; title = displayNameHint; displayName = sanitizeDisplayName(displayNameHint); origin = 'user-input-fallback';
     }
   }
 
   console.log('Nombre final: "' + displayName + '"  (origen: ' + origin + ')');
-  console.log('iTunes buscara: "' + artist + '" / "' + title + '"');
 
-  const meta = await tagMp3(ytFilePath, artist, title).catch((err) => {
-    console.warn('Metadata fallo: ' + err.message); return null;
-  });
-
-  if (meta) {
-    console.log('   -> ' + meta.artist + ' - ' + meta.title);
-    if (meta.album) console.log('   -> Album: ' + meta.album + (meta.year ? ' (' + meta.year + ')' : ''));
-    if (meta.coverBuffer) console.log('   -> Portada descargada OK');
-  } else { console.log('   -> Sin metadata'); }
+  const meta = await tagMp3(ytFilePath, artist, title).catch((err) => { return null; });
 
   let coverFileId = null;
   if (meta && meta.coverBuffer) {
@@ -309,7 +274,6 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
         media: { mimeType: 'image/jpeg', body: Readable.from(meta.coverBuffer) }, fields: 'id',
       });
       coverFileId = coverRes.data.id;
-      console.log('   -> Portada subida: ' + coverFileId);
     } catch (err) { console.warn('No se pudo subir la portada: ' + err.message); }
   }
 
