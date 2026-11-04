@@ -28,6 +28,7 @@ const YTDLP_COMMON_ARGS = [
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
   '--force-ipv4',
+  '--sleep-requests', '2', // <-- NUEVO: Espera 2 seg entre peticiones
   '--no-check-certificates',
   '--prefer-free-formats',
 ];
@@ -277,7 +278,7 @@ async function getWritableCookiesPath() {
 export async function probeYoutube(query) {
   const cookies = await getWritableCookiesPath();
   const cmd = [
-    'yt-dlp',
+    'yt-dude', // <-- CAMBIADO
     ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
     '--no-config',
     ...YTDLP_COMMON_ARGS,
@@ -312,7 +313,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   console.log('Buscando en YouTube: "' + query + '"  [source=' + source + ']');
 
   const cmd = [
-    'yt-dlp',
+    'yt-dude', // <-- CAMBIADO
     ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
     '--no-config',
     ...YTDLP_COMMON_ARGS,
