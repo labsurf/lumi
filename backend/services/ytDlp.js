@@ -23,7 +23,7 @@ if (!fs.existsSync(COOKIES_FILE)) {
 }
 
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', 'youtube:player_client=android',
+  '--extractor-args', 'youtube:player_client=ios,mweb',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
@@ -31,7 +31,6 @@ const YTDLP_COMMON_ARGS = [
   '--no-check-certificates',
   '--prefer-free-formats',
 ];
-
 function sanitizeDisplayName(name) {
   return name
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
