@@ -27,6 +27,7 @@ const YTDLP_COMMON_ARGS = [
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
+  '--force-ipv4',
   '--no-check-certificates',
   '--prefer-free-formats',
 ];
