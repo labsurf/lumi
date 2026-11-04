@@ -26,6 +26,7 @@ const YTDLP_COMMON_ARGS = [
   '--extractor-args', 'youtube:player_client=android',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
+  '--socket-timeout', '15',
   '--no-check-certificates',
   '--prefer-free-formats',
 ];
