@@ -5,12 +5,13 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import crypto from 'crypto';
 import os from 'os';
-import { Readable } from 'stream';
+import { Readable, pipeline } from 'stream';
 import { fileURLToPath } from 'url';
 import { drive } from './auth.js';
 import { tagMp3, resolveFromItunes } from './metadata.js';
 
 const execAsync = promisify(exec);
+const pipelineAsync = promisify(pipeline);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TMP_DIR = path.resolve(__dirname, '..', 'tmp');
 const COOKIES_FILE = path.resolve(__dirname, '..', 'cookies.txt');
@@ -168,6 +169,9 @@ async function getWritableCookiesPath() {
 // ═══════════════════════════════════════════════════════
 async function downloadWithVidssave(videoId) {
   console.log('   Intentando descarga con Vidssave (Tier 1)...');
+
+  let filePath = null;
+
   try {
     const infoRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/parse', {
       method: 'POST',
@@ -187,12 +191,62 @@ async function downloadWithVidssave(videoId) {
       signal: AbortSignal.timeout(10000),
     });
 
-    if (!infoRes.ok) throw new Error(`Vidssave parse falló: ${infoRes.status}`);
-    const infoJson = await infoRes.json();
-    if (!infoJson.data || !infoJson.data.resources) throw new Error('Vidssave no devolvió recursos.');
+    // Leemos el cuerpo una sola vez para poder diagnosticar también respuestas no-JSON.
+    const infoContentType = infoRes.headers.get('content-type') || '(sin content-type)';
+    const infoText = await infoRes.text();
 
-    const audioResource = infoJson.data.resources.find((r) => r.type === 'audio');
-    if (!audioResource || !audioResource.resource_content) throw new Error('No se encontró recurso de audio.');
+    let infoJson;
+    try {
+      infoJson = JSON.parse(infoText);
+    } catch {
+      console.warn(
+        `   ⚠️ Vidssave parse: HTTP ${infoRes.status}; content-type=${infoContentType}; ` +
+        `respuesta no JSON (${infoText.length} caracteres).`
+      );
+      throw new Error(`Vidssave parse devolvió una respuesta no JSON (HTTP ${infoRes.status}).`);
+    }
+
+    const rootKeys = infoJson && typeof infoJson === 'object'
+      ? Object.keys(infoJson)
+      : [];
+    const dataKeys = infoJson?.data && typeof infoJson.data === 'object'
+      ? Object.keys(infoJson.data)
+      : [];
+    const resources = Array.isArray(infoJson?.data?.resources)
+      ? infoJson.data.resources
+      : [];
+
+    console.log(
+      `   Vidssave parse: HTTP ${infoRes.status}; content-type=${infoContentType}; ` +
+      `rootKeys=[${rootKeys.join(',')}]; dataKeys=[${dataKeys.join(',')}]; ` +
+      `resources=${resources.length}.`
+    );
+
+    if (!infoRes.ok) {
+      const apiMessage = String(
+        infoJson?.message || infoJson?.error || infoJson?.data?.message || ''
+      ).slice(0, 240);
+      throw new Error(
+        `Vidssave parse falló: HTTP ${infoRes.status}` +
+        (apiMessage ? ` (${apiMessage})` : '')
+      );
+    }
+
+    if (!Array.isArray(infoJson?.data?.resources)) {
+      throw new Error(
+        `Vidssave no devolvió data.resources. dataKeys=[${dataKeys.join(',')}].`
+      );
+    }
+
+    const resourceTypes = resources
+      .map((resource) => String(resource?.type || '(sin tipo)'))
+      .slice(0, 12);
+    console.log(`   Vidssave tipos de recursos: [${resourceTypes.join(', ')}].`);
+
+    const audioResource = resources.find((resource) => resource?.type === 'audio');
+    if (!audioResource || !audioResource.resource_content) {
+      throw new Error('Vidssave no entregó un recurso de audio con resource_content.');
+    }
 
     const dlRes = await fetch('https://api.vidssave.com/api/contentsite_api/media/download', {
       method: 'POST',
@@ -212,29 +266,72 @@ async function downloadWithVidssave(videoId) {
       signal: AbortSignal.timeout(15000),
     });
 
-    if (!dlRes.ok) throw new Error(`Vidssave download falló: ${dlRes.status}`);
-    const dlJson = await dlRes.json();
-    
-    // En MediaSaver, el enlace final viene en dlJson.data.url
-    const finalUrl = dlJson.data && (dlJson.data.url || dlJson.data.download_url || dlJson.data.link);
-    if (!finalUrl) throw new Error('No se pudo extraer la URL final del MP3.');
+    const dlContentType = dlRes.headers.get('content-type') || '(sin content-type)';
+    const dlText = await dlRes.text();
+
+    let dlJson;
+    try {
+      dlJson = JSON.parse(dlText);
+    } catch {
+      console.warn(
+        `   ⚠️ Vidssave download: HTTP ${dlRes.status}; content-type=${dlContentType}; ` +
+        `respuesta no JSON (${dlText.length} caracteres).`
+      );
+      throw new Error(`Vidssave download devolvió una respuesta no JSON (HTTP ${dlRes.status}).`);
+    }
+
+    const dlDataKeys = dlJson?.data && typeof dlJson.data === 'object'
+      ? Object.keys(dlJson.data)
+      : [];
+    console.log(
+      `   Vidssave download: HTTP ${dlRes.status}; content-type=${dlContentType}; ` +
+      `dataKeys=[${dlDataKeys.join(',')}].`
+    );
+
+    if (!dlRes.ok) {
+      const apiMessage = String(
+        dlJson?.message || dlJson?.error || dlJson?.data?.message || ''
+      ).slice(0, 240);
+      throw new Error(
+        `Vidssave download falló: HTTP ${dlRes.status}` +
+        (apiMessage ? ` (${apiMessage})` : '')
+      );
+    }
+
+    // Se conserva el contrato que ya utilizaba el proyecto; no se inventan campos nuevos.
+    const finalUrl = dlJson?.data?.url || dlJson?.data?.download_url || dlJson?.data?.link;
+    if (!finalUrl || typeof finalUrl !== 'string') {
+      throw new Error(
+        `Vidssave no devolvió data.url, data.download_url ni data.link. dataKeys=[${dlDataKeys.join(',')}].`
+      );
+    }
 
     const mp3Res = await fetch(finalUrl, { signal: AbortSignal.timeout(60000) });
-    if (!mp3Res.ok) throw new Error(`Error al descargar MP3: ${mp3Res.status}`);
+    if (!mp3Res.ok) {
+      throw new Error(`Error al descargar el audio desde Vidssave: HTTP ${mp3Res.status}`);
+    }
+    if (!mp3Res.body) {
+      throw new Error('Vidssave devolvió una respuesta de descarga sin contenido.');
+    }
 
     const jobId = crypto.randomUUID();
-    const filePath = path.join(TMP_DIR, `${jobId}.mp3`);
-    const fileStream = fs.createWriteStream(filePath);
-    
-    await new Promise((resolve, reject) => {
-      mp3Res.body.pipe(fileStream);
-      mp3Res.body.on('error', reject);
-      fileStream.on('finish', resolve);
-    });
+    filePath = path.join(TMP_DIR, `${jobId}.mp3`);
 
-    console.log('   ✅ Vidssave descargó el audio con éxito.');
+    // fetch() entrega un Web ReadableStream; se convierte al stream de Node.js.
+    await pipelineAsync(
+      Readable.fromWeb(mp3Res.body),
+      fs.createWriteStream(filePath)
+    );
+
+    const stat = await fsp.stat(filePath);
+    if (!stat.size) {
+      throw new Error('Vidssave generó un archivo de audio vacío.');
+    }
+
+    console.log(`   ✅ Vidssave descargó el audio (${stat.size} bytes).`);
     return filePath;
   } catch (err) {
+    if (filePath) await fsp.unlink(filePath).catch(() => {});
     console.warn('   ⚠️ Vidssave falló:', err.message);
     return null;
   }
@@ -273,9 +370,10 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   const outTemplate = tmpBase + '.%(ext)s';
   const cookies = await getWritableCookiesPath();
 
-  console.log('Buscando en YouTube: "' + query + '"  [source=' + source + ']');
+  try {
+    console.log('Buscando en YouTube: "' + query + '"  [source=' + source + ']');
 
-  // 1. Buscar el video
+    // 1. Buscar el video
   const searchCmd = [
     'yt-dlp',
     '--no-config',
@@ -327,10 +425,16 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
       const { stdout: dlStdout } = await execAsync(downloadCmd, { maxBuffer: 20 * 1024 * 1024, windowsHide: true, timeout: 120000 });
       ytFilePath = parseYtMetadata(dlStdout).file;
     } catch (err) {
-      console.error('   Error en yt-dlp:', err.message);
-      throw new Error('YouTube bloqueó la descarga. Intenta de nuevo más tarde.');
-    } finally {
-      if (cookies) await fsp.unlink(cookies).catch(() => {});
+      const details = String(err?.stderr || err?.message || err).slice(0, 1800);
+      console.error('   Error en yt-dlp:', details);
+
+      if (/Sign in to confirm|not a bot|bot/i.test(details)) {
+        throw new Error('YouTube rechazó la solicitud de descarga por verificación antibot.');
+      }
+      if (/video is unavailable|Error code: 152/i.test(details)) {
+        throw new Error('YouTube indica que el video no está disponible para este método de extracción.');
+      }
+      throw new Error('Falló yt-dlp al obtener el audio. Revisa el log del servidor para ver el error original.');
     }
   }
 
@@ -381,5 +485,8 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   await fsp.unlink(ytFilePath).catch(() => {});
   console.log('Subido a Drive: ' + created.data.name + ' (' + created.data.id + ')');
 
-  return { ...created.data, coverFileId };
+    return { ...created.data, coverFileId };
+  } finally {
+    if (cookies) await fsp.unlink(cookies).catch(() => {});
+  }
 }
