@@ -23,7 +23,7 @@ if (!fs.existsSync(COOKIES_FILE)) {
 }
 
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', 'youtube:player_client=ios,mweb',
+  '--extractor-args', 'youtube:player_client=default',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
@@ -31,6 +31,7 @@ const YTDLP_COMMON_ARGS = [
   '--no-check-certificates',
   '--prefer-free-formats',
 ];
+
 function sanitizeDisplayName(name) {
   return name
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
@@ -292,6 +293,7 @@ export async function probeYoutube(query) {
   const { stdout } = await execAsync(cmd, {
     maxBuffer: 5 * 1024 * 1024,
     windowsHide: true,
+    timeout: 40000, // <-- NUEVO: Corta a los 40 segundos
   });
 
   if (cookies) await fsp.unlink(cookies).catch(() => {});
@@ -332,6 +334,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
   const { stdout } = await execAsync(cmd, {
     maxBuffer: 20 * 1024 * 1024,
     windowsHide: true,
+    timeout: 120000, // <-- NUEVO: Corta a los 2 minutos (para descargas reales)
   });
 
   if (cookies) await fsp.unlink(cookies).catch(() => {});
