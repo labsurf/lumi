@@ -9,7 +9,6 @@ import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import { drive } from './auth.js';
 import { tagMp3, resolveFromItunes } from './metadata.js';
-import { downloadYouTubeAudioReliable } from 'yt-innertube'; 
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,8 +22,10 @@ if (!fs.existsSync(COOKIES_FILE)) {
   console.warn('Warning: No se encontro ' + COOKIES_FILE);
 }
 
+// Argumentos compartidos para búsqueda y descarga (Incluye el POT Provider)
 const YTDLP_COMMON_ARGS = [
-  '--extractor-args', '"youtube:player_client=default;youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"',
+  '--extractor-args', '"youtube:player_client=default"',
+  '--extractor-args', '"youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"',
   '--js-runtimes', 'deno',
   '--remote-components', 'ejs:github',
   '--socket-timeout', '15',
@@ -163,14 +164,14 @@ async function getWritableCookiesPath() {
 }
 
 export async function probeYoutube(query) {
-  // La búsqueda se hace SIN cookies para que no se cuelgue, y con --flat-playlist para que sea rápida
   const cmd = [
     'yt-dlp',
-    '--no-config', 
-    '--extractor-args', 'youtube:player_client=default;youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
+    '--no-config',
+    ...YTDLP_COMMON_ARGS,
     '--flat-playlist',
-    '--skip-download', '--no-warnings',
-    '"ytsearch1:' + query.replace(/"/g, '') + '"',
+    '--skip-download',
+    '--no-warnings',
+    `"ytsearch1:${query.replace(/"/g, '')}"`,
     '--print', '"@@TITLE@@%(title)s"',
     '--print', '"@@ARTIST@@%(artist)s"',
     '--print', '"@@TRACK@@%(track)s"',
@@ -178,7 +179,7 @@ export async function probeYoutube(query) {
     '--print', '"@@URL@@%(webpage_url)s"',
   ].join(' ');
 
-  const { stdout } = await execAsync(cmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 20000 });
+  const { stdout } = await execAsync(cmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 40000 });
   const yt = parseYtMetadata(stdout);
   return { ...yt, ...resolveFinalName(yt, query) };
 }
@@ -191,14 +192,15 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
 
   console.log('Buscando en YouTube: "' + query + '"  [source=' + source + ']');
 
-  // 1. Buscar el video (SIN cookies para evitar bloqueos de búsqueda)
+  // 1. Buscar el video
   const searchCmd = [
     'yt-dlp',
-    '--no-config', 
-    '--extractor-args', 'youtube:player_client=default',
+    '--no-config',
+    ...YTDLP_COMMON_ARGS,
     '--flat-playlist',
-    '--skip-download', '--no-warnings',
-    '"ytsearch1:' + query.replace(/"/g, '') + '"',
+    '--skip-download',
+    '--no-warnings',
+    `"ytsearch1:${query.replace(/"/g, '')}"`,
     '--print', '"@@TITLE@@%(title)s"',
     '--print', '"@@ARTIST@@%(artist)s"',
     '--print', '"@@TRACK@@%(track)s"',
@@ -206,46 +208,45 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
     '--print', '"@@URL@@%(webpage_url)s"',
   ].join(' ');
 
-  const { stdout: searchStdout } = await execAsync(searchCmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 20000 });
+  const { stdout: searchStdout } = await execAsync(searchCmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true, timeout: 40000 });
   const yt = parseYtMetadata(searchStdout);
 
-  if (!yt.url) {
-    throw new Error('No se pudo encontrar el video en YouTube para: ' + query);
+  if (!yt.url || !yt.url.includes('/watch?v=')) {
+    throw new Error('La búsqueda no devolvió un video válido. Intenta con otro nombre.');
   }
 
   console.log('   URL del video:', yt.url);
 
-  // 2. Descargar usando yt-innertube
+  // 2. Descargar con yt-dlp (usando cookies y POT)
+  const downloadCmd = [
+    'yt-dlp',
+    ...(cookies ? ['--cookies', `"${cookies}"`] : []),
+    '--no-config',
+    ...YTDLP_COMMON_ARGS,
+    `"${yt.url}"`,
+    '-x',
+    '--audio-format', 'mp3',
+    '--audio-quality', '0',
+    '--no-playlist',
+    '--no-warnings',
+    '-f', '"bestaudio*/best"',
+    '-o', `"${outTemplate}"`,
+    '--print', '"after_move:@@FILE@@%(filepath)s"',
+  ].join(' ');
+
   let ytFilePath = null;
   try {
-    console.log('   Intentando descarga con yt-innertube...');
-    const result = await downloadYouTubeAudioReliable(yt.url, 0, 0, null, TMP_DIR, jobId + '.mp3');
-    if (result.path) {
-      ytFilePath = result.path;
-      console.log('   ✅ yt-innertube descargó el audio con éxito.');
-    } else {
-      throw new Error('yt-innertube no devolvió una ruta de archivo.');
-    }
-  } catch (innertubeError) {
-    console.warn('   ⚠️ yt-innertube falló, usando yt-dlp como respaldo:', innertubeError.message);
-    const downloadCmd = [
-      'yt-dlp',
-      ...(cookies ? ['--cookies', '"' + cookies + '"'] : []),
-      '--no-config', ...YTDLP_COMMON_ARGS,
-      '"' + yt.url + '"', 
-      '-x', '--audio-format', 'mp3', '--audio-quality', '0',
-      '--no-playlist', '--no-warnings', '-f', '"bestaudio*/best"',
-      '-o', '"' + outTemplate + '"',
-      '--print', '"after_move:@@FILE@@%(filepath)s"',
-    ].join(' ');
-
     const { stdout: dlStdout } = await execAsync(downloadCmd, { maxBuffer: 20 * 1024 * 1024, windowsHide: true, timeout: 120000 });
     ytFilePath = parseYtMetadata(dlStdout).file;
-    if (!ytFilePath || !fs.existsSync(ytFilePath)) {
-      throw new Error('Tanto yt-innertube como yt-dlp fallaron al descargar el audio.');
-    }
+  } catch (err) {
+    console.error('   Error en yt-dlp:', err.message);
+    throw new Error('YouTube bloqueó la descarga. Intenta de nuevo más tarde.');
   } finally {
     if (cookies) await fsp.unlink(cookies).catch(() => {});
+  }
+
+  if (!ytFilePath || !fs.existsSync(ytFilePath)) {
+    throw new Error('No se pudo descargar el archivo de audio.');
   }
 
   console.log('Descargado temporalmente: ' + path.basename(ytFilePath));
@@ -264,7 +265,7 @@ export async function downloadAndUpload(query, displayNameHint, source = 'manual
 
   console.log('Nombre final: "' + displayName + '"  (origen: ' + origin + ')');
 
-  const meta = await tagMp3(ytFilePath, artist, title).catch((err) => { return null; });
+  const meta = await tagMp3(ytFilePath, artist, title).catch(() => null);
 
   let coverFileId = null;
   if (meta && meta.coverBuffer) {
