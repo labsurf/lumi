@@ -327,7 +327,8 @@ async function downloadWithVidssave(videoId) {
         hostname: 'vidssave.com',
         auth: '4c9b7d21',
         domain: 'api-ak.vidssave.com',
-        origin: 'source',
+        // El navegador exitoso envía origin=cache; source provoca analyze_risk.
+        origin: 'cache',
         link: videoUrl,
       }).toString(),
       signal: AbortSignal.timeout(20000),
