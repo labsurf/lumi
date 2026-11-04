@@ -167,7 +167,7 @@ export async function probeYoutube(query) {
   const cmd = [
     'yt-dlp',
     '--no-config', 
-    '--extractor-args', 'youtube:player_client=default',
+    '--extractor-args', 'youtube:player_client=default;youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
     '--flat-playlist',
     '--skip-download', '--no-warnings',
     '"ytsearch1:' + query.replace(/"/g, '') + '"',
