@@ -873,7 +873,21 @@ loadChartBtn.onclick = async () => {
     if (!res.ok) throw new Error(data.error);
 
     currentChart = data.tracks;
-    chartStatus.innerHTML = `${ICONS.ok} ${data.count} canciones cargadas`;
+    
+    // Formatear la fecha para mostrarla como DD/MM/YYYY
+    let dateText = '';
+    if (data.updateDate) {
+      const dateObj = new Date(data.updateDate);
+      // Añadimos un día para evitar problemas de zona horaria al parsear 'YYYY-MM-DD'
+      dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
+      const formattedDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      dateText = ` · <span style="color:#888;font-size:0.85em;">Actualizado: ${formattedDate}</span>`;
+    }
+
+    // Mostrar el nombre de la fuente (si viene), cantidad y fecha
+    const sourceName = data.sourceName || 'Chart';
+    chartStatus.innerHTML = `${ICONS.ok} <b>${sourceName}</b> · ${data.count} canciones${dateText}`;
+    
     renderChart();
   } catch (err) {
     chartStatus.style.color = '#ff4b4b';

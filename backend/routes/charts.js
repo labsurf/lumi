@@ -16,8 +16,16 @@ router.get('/sources', (req, res) => {
 router.get('/', async (req, res) => {
   const sourceId = req.query.source || 'billboard-hot-100';
   try {
-    const tracks = await getChart(sourceId);
-    res.json({ source: sourceId, count: tracks.length, tracks });
+    // Ahora getChart devuelve un objeto { tracks, updateDate, sourceName }
+    const chartData = await getChart(sourceId); 
+    
+    res.json({ 
+      source: sourceId, 
+      sourceName: chartData.sourceName,
+      updateDate: chartData.updateDate,
+      count: chartData.tracks.length, 
+      tracks: chartData.tracks 
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -30,8 +38,9 @@ router.post('/download', async (req, res) => {
   const concurrency = Math.min(parseInt(req.body.concurrency || 2, 10), 4);
 
   try {
-    const tracks = await getChart(sourceId);
-    const subset = tracks.slice(0, limit);
+    const chartData = await getChart(sourceId);
+    // Accedemos a la propiedad .tracks del nuevo objeto
+    const subset = chartData.tracks.slice(0, limit); 
 
     if (subset.length === 0) {
       return res.status(400).json({ error: 'La fuente devolvió un chart vacío' });
@@ -47,7 +56,6 @@ router.post('/download', async (req, res) => {
     const run = pLimit(concurrency);
     const results = { ok: [], failed: [], skipped: [] };
 
-    // 👇 Guardamos los promises para poder esperarlos después
     const promises = subset.map((track) =>
       run(async () => {
         try {
@@ -84,7 +92,6 @@ router.post('/download', async (req, res) => {
       })
     );
 
-    // 👇 Aquí se espera que TODAS terminen y se imprime el resumen
     Promise.all(promises).then(() => {
       console.log('\n═══════════════════════════════════════');
       console.log(`🏁 Descarga de chart terminada (${sourceId})`);

@@ -7,18 +7,22 @@ async function getBillboardHot100() {
   const url = 'https://raw.githubusercontent.com/mhollingshead/billboard-hot-100/main/recent.json';
   const { data } = await axios.get(url, { timeout: 10000 });
 
-  return data.data.map((item) => ({
+  // El JSON incluye la fecha en data.date (formato YYYY-MM-DD)
+  const updateDate = data.date || new Date().toISOString().split('T')[0];
+
+  const tracks = data.data.map((item) => ({
     position: item.this_week,
     title: item.song,
     artist: item.artist,
     query: `${item.artist} ${item.song}`,
     displayName: `${item.artist} - ${item.song}`,
   })).sort((a, b) => a.position - b.position);
+
+  return { tracks, updateDate, sourceName: 'Billboard Hot 100' };
 }
 
-// ─── iTUNES TOP 100 (por país) — Endpoint clásico ──────
+// ─── iTUNES TOP 100 (por país) ──────────────────────────
 async function getItunesTop100(country = 'us') {
-  // Endpoint clásico de iTunes, estable desde hace 15+ años
   const url = `https://itunes.apple.com/${country}/rss/topsongs/limit=100/json`;
   const { data } = await axios.get(url, {
     headers: { 'User-Agent': UA },
@@ -29,7 +33,12 @@ async function getItunesTop100(country = 'us') {
     throw new Error(`Respuesta inválida de iTunes (${country})`);
   }
 
-  return data.feed.entry.map((item, i) => {
+  // iTunes incluye la fecha en feed.updated.label
+  const updateDate = data.feed.updated?.label 
+    ? new Date(data.feed.updated.label).toISOString().split('T')[0] 
+    : new Date().toISOString().split('T')[0];
+
+  const tracks = data.feed.entry.map((item, i) => {
     const artist = item['im:artist']?.label || 'Desconocido';
     const title = item['im:name']?.label || item.title?.label || 'Sin título';
     return {
@@ -40,20 +49,22 @@ async function getItunesTop100(country = 'us') {
       displayName: `${artist} - ${title}`,
     };
   });
+
+  return { tracks, updateDate, sourceName: `iTunes Top 100 (${country.toUpperCase()})` };
 }
 
 // ─── SPOTIFY TOP 50 (vía CSV público) ───────────────────
-// Nota: Spotify cambia su estructura de vez en cuando. Fallback: usar kworb.net
 async function getSpotifyTop50() {
   try {
-    // Kworb mantiene un CSV estable con los top de Spotify
     const url = 'https://kworb.net/spotify/country/global_daily.html';
     const { data } = await axios.get(url, {
       headers: { 'User-Agent': UA },
       timeout: 10000,
     });
 
-    // Parseo simple del HTML de kworb (tabla de artistas/canciones)
+    // Kworb no expone una fecha parseable fácilmente, usamos la fecha actual
+    const updateDate = new Date().toISOString().split('T')[0];
+
     const rows = data.match(/<tr[\s\S]*?<\/tr>/g) || [];
     const tracks = [];
 
@@ -79,10 +90,10 @@ async function getSpotifyTop50() {
       if (tracks.length >= 50) break;
     }
 
-    return tracks;
+    return { tracks, updateDate, sourceName: 'Spotify Global Top 50' };
   } catch (err) {
     console.warn('⚠️  Spotify chart falló:', err.message);
-    return [];
+    return { tracks: [], updateDate: new Date().toISOString().split('T')[0], sourceName: 'Spotify Global Top 50' };
   }
 }
 
@@ -117,6 +128,11 @@ export const CHART_SOURCES = {
     name: 'iTunes Top 100 (Colombia)',
     description: 'Más escuchadas en Apple Music Colombia',
     fetch: () => getItunesTop100('co'),
+  },
+  'itunes-pe': {
+    name: 'iTunes Top 100 (Perú)',
+    description: 'Más escuchadas en Apple Music Perú',
+    fetch: () => getItunesTop100('pe'), // <-- NUEVA FUENTE
   },
   'spotify-global': {
     name: 'Spotify Global Top 50',
